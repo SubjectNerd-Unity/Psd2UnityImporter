@@ -1,2 +1,5 @@
-# UnityPsdImportTwo
-A revamp of the Unity PSD importer, using NTreeSoft PSD Parser
+# PsdToUnity Importer
+
+An advanced Photoshop importer tool for Unity that simplifies layer import and layout rebuilding in Unity.
+
+Uses the [NtreevSoft PSD Parser](https://github.com/NtreevSoft/psd-parser) library.
