@@ -15,8 +15,9 @@ namespace SubjectNerd.PsdImporter
 	{
 		public string pathId;
 		public string name;
+		public bool export;
+		public bool useDefaults;
 		public SpriteAlignment Alignment;
-		public Vector2 Pivot;
 		public ScaleFactor ScaleFactor;
 
 		public ImportLayerData[] ChildLayers;
@@ -27,6 +28,7 @@ namespace SubjectNerd.PsdImporter
 	{
 		public string PackingTag;
 		public string TargetDirectory;
+		public bool AutoImport;
 		public SpriteAlignment DefaultAlignment = SpriteAlignment.Center;
 		public Vector2 DefaultPivot = new Vector2(0.5f, 0.5f);
 		public ScaleFactor ScaleFactor = ScaleFactor.Full;
