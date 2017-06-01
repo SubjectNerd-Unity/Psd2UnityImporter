@@ -25,7 +25,7 @@ using SubjectNerd.PsdImporter.PsdParser.Readers.LayerAndMaskInformation;
 
 namespace SubjectNerd.PsdImporter.PsdParser
 {
-    class PsdLayer : IPsdLayer
+    public class PsdLayer : IPsdLayer
     {
         private readonly PsdDocument document;
         private readonly LayerRecords records;

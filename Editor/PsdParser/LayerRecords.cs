@@ -24,7 +24,7 @@ using System.Linq;
 
 namespace SubjectNerd.PsdImporter.PsdParser
 {
-    class LayerRecords
+    public class LayerRecords
     {
         private Channel[] channels;
 

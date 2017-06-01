@@ -25,7 +25,7 @@ using System.Text;
 
 namespace SubjectNerd.PsdImporter.PsdParser
 {
-    class PsdReader : IDisposable
+    public class PsdReader : IDisposable
     {
         private readonly BinaryReader reader;
         private readonly PsdResolver resolver;

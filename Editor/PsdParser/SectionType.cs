@@ -21,7 +21,7 @@
 
 namespace SubjectNerd.PsdImporter.PsdParser
 {
-    enum SectionType
+    public enum SectionType
     {
         Normal,
 

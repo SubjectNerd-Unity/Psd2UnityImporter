@@ -21,7 +21,7 @@
 
 namespace SubjectNerd.PsdImporter.PsdParser
 {
-    class LayerBlendingRanges
+    public class LayerBlendingRanges
     {
         
     }

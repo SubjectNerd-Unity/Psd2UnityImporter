@@ -23,7 +23,7 @@ using System;
 
 namespace SubjectNerd.PsdImporter.PsdParser
 {
-    class Channel : IChannel
+    public class Channel : IChannel
     {
         private byte[] data;
         private ChannelType type;

@@ -21,7 +21,7 @@
 
 namespace SubjectNerd.PsdImporter.PsdParser
 {
-    class LayerMask
+    public class LayerMask
     {
         public int Left { get; set; }
 
