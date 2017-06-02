@@ -69,6 +69,7 @@ namespace SubjectNerd.PsdImporter
 		fsSerializer serializer;
 		private Type typeTex2D, typeImportUserData;
 		private bool showImportSettings;
+		private List<int[]> quickImport = new List<int[]>(); 
 
 		#region UI fields
 		private readonly GUIContent labelLayers = new GUIContent("Layers");
@@ -90,6 +91,7 @@ namespace SubjectNerd.PsdImporter
 						styleToolbar, styleToolSearch, styleToolCancel;
 		private Texture2D icnFolder, icnTexture;
 		private GUILayoutOption layerHeight;
+		private GUILayoutOption noExpandW;
 
 		private Vector2 scrollPos;
 
@@ -102,6 +104,7 @@ namespace SubjectNerd.PsdImporter
 				return;
 
 			layerHeight = GUILayout.Height(EditorGUIUtility.singleLineHeight + 5);
+			noExpandW = GUILayout.ExpandWidth(false);
 			icnFolder = EditorGUIUtility.FindTexture("Folder Icon");
 			icnTexture = EditorGUIUtility.FindTexture("Texture Icon");
 
@@ -171,6 +174,8 @@ namespace SubjectNerd.PsdImporter
 
 			importSettings = new ImportUserData();
 			importDisplay = null;
+
+			quickImport.Clear();
 
 			var filePath = AssetDatabase.GetAssetPath(fileObject);
 			if (filePath.ToLower().EndsWith(".psd") == false)
@@ -348,19 +353,20 @@ namespace SubjectNerd.PsdImporter
 				EditorGUI.BeginDisabledGroup(importFile == null);
 
 				var bigButton = GUILayout.Height(30);
-
-				int importCount = 0;
+				
+				List<int[]> importIds = new List<int[]>();
 				IterateImportLayerData(importSettings.DocRoot, layer =>
 				{
 					if (layer.import && layer.Childs.Count == 0)
-						importCount++;
+						importIds.Add(layer.indexId);
 				}, layer => layer.import);
 
-				string importText = string.Format("Import Selected ({0})", importCount);
+				string textImport = string.Format("Import Selected ({0})", importIds.Count);
+				string textQuickImport = string.Format("Quick Import ({0})", quickImport.Count);
 
-				GUILayout.Button(importText, bigButton);
-				GUILayout.Button("<", bigButton, GUILayout.ExpandWidth(false));
-				GUILayout.Button("Quick Import", bigButton);
+				GUILayout.Button(textImport, bigButton);
+				GUILayout.Button("<", bigButton, noExpandW);
+				GUILayout.Button(textQuickImport, bigButton);
 
 				EditorGUI.EndDisabledGroup();
 			}
@@ -386,6 +392,59 @@ namespace SubjectNerd.PsdImporter
 			DrawIterateLayers(importSettings.DocRoot);
 		}
 
+		private void DrawLayerEntry(ImportLayerData layer, DisplayLayerData display)
+		{
+			bool isGroup = layer.Childs.Count > 0;
+
+			using (new GUILayout.HorizontalScope(styleDivider, layerHeight))
+			{
+				bool parentNoImport = ParentWillImport(layer.indexId) == false;
+
+				using (new EditorGUI.DisabledGroupScope(parentNoImport))
+				{
+					var displayImport = layer.import && !parentNoImport;
+					EditorGUI.BeginChangeCheck();
+					displayImport = GUILayout.Toggle(displayImport, GUIContent.none, noExpandW);
+
+					if (EditorGUI.EndChangeCheck() && !parentNoImport)
+						layer.import = displayImport;
+				}
+
+				using (new EditorGUI.DisabledGroupScope(true))
+				{
+					var visStyle = display.isVisible ? styleVisOn : styleVisOff;
+					GUILayout.Label(GUIContent.none, visStyle);
+				}
+
+				GUILayout.Space(indentLevel * indentWidth);
+
+				GUIContent layerContent = new GUIContent()
+				{
+					image = isGroup ? icnFolder : icnTexture,
+					text = layer.name
+				};
+
+				if (isGroup)
+					display.isOpen = EditorGUILayout.Foldout(display.isOpen, layerContent);
+				else
+					EditorGUILayout.LabelField(layerContent, layerHeight);
+
+				using (var didChange = new EditorGUI.ChangeCheckScope())
+				{
+					bool isQuickImport = quickImport.Contains(layer.indexId);
+					isQuickImport = EditorGUILayout.Toggle(GUIContent.none, isQuickImport, noExpandW);
+
+					if (didChange.changed)
+					{
+						if (isQuickImport)
+							quickImport.Add(layer.indexId);
+						else
+							quickImport.Remove(layer.indexId);
+					}
+				}
+			}
+		}
+
 		private void DrawIterateLayers(ImportLayerData layerData)
 		{
 			IterateImportLayerData(layerData,
@@ -394,42 +453,7 @@ namespace SubjectNerd.PsdImporter
 					var display = GetDisplayData(layer.indexId);
 					if (display == null)
 						return;
-
-					bool isGroup = layer.Childs.Count > 0;
-
-					using (new GUILayout.HorizontalScope(styleDivider, layerHeight))
-					{
-						bool parentNoImport = ParentWillImport(layer.indexId) == false;
-
-						using (new EditorGUI.DisabledGroupScope(parentNoImport))
-						{
-							var displayImport = layer.import && !parentNoImport;
-							EditorGUI.BeginChangeCheck();
-							displayImport = GUILayout.Toggle(displayImport, GUIContent.none, GUILayout.ExpandWidth(false));
-
-							if (EditorGUI.EndChangeCheck() && !parentNoImport)
-								layer.import = displayImport;
-						}
-
-						using (new EditorGUI.DisabledGroupScope(true))
-						{
-							var visStyle = display.isVisible ? styleVisOn : styleVisOff;
-							GUILayout.Label(GUIContent.none, visStyle);
-						}
-
-						GUILayout.Space(indentLevel * indentWidth);
-
-						GUIContent layerContent = new GUIContent()
-						{
-							image = isGroup ? icnFolder : icnTexture,
-							text = layer.name
-						};
-
-						if (isGroup)
-							display.isOpen = EditorGUILayout.Foldout(display.isOpen, layerContent);
-						else
-							EditorGUILayout.LabelField(layerContent, layerHeight);
-					}
+					DrawLayerEntry(layer, display);
 				},
 				canEnterGroup: layer =>
 				{
@@ -566,7 +590,7 @@ namespace SubjectNerd.PsdImporter
 						importSettings.TargetDirectory = userPath;
 				}
 
-				if (GUILayout.Button(labelPickPath, EditorStyles.miniButtonRight, GUILayout.ExpandWidth(false)))
+				if (GUILayout.Button(labelPickPath, EditorStyles.miniButtonRight, noExpandW))
 				{
 					GUI.FocusControl(null);
 					string openPath = importSettings.TargetDirectory;
