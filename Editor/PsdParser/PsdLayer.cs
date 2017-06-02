@@ -72,6 +72,16 @@ namespace SubjectNerd.PsdImporter.PsdParser
 			get { return (this.records.Flags & LayerFlags.Visible) != LayerFlags.Visible; }
 	    }
 
+	    public bool IsFolderClosed
+	    {
+			get { return records.SectionType == SectionType.Closed; }
+	    }
+
+	    public bool IsFolderOpen
+	    {
+		    get { return records.SectionType == SectionType.Opend; }
+	    }
+
         public float Opacity
         {
             get { return (((float)this.records.Opacity) / 255f); }

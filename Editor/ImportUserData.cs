@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Collections.Generic;
 using UnityEngine;
 
 namespace SubjectNerd.PsdImporter
@@ -10,22 +11,30 @@ namespace SubjectNerd.PsdImporter
 		Quarter
 	}
 
-	[Serializable]
-	public struct ImportLayerData
+	public enum NamingConvention
 	{
-		public string pathId;
+		LayerNameOnly,
+		PrefixGroupNames,
+		CreateGroupFolders
+	}
+	
+	public class ImportLayerData
+	{
 		public string name;
-		public bool export;
+		public string path;
+		public int[] indexId;
+		public bool import;
 		public bool useDefaults;
 		public SpriteAlignment Alignment;
+		public Vector2 Pivot;
 		public ScaleFactor ScaleFactor;
 
-		public ImportLayerData[] ChildLayers;
+		public List<ImportLayerData> Childs;
 	}
-
-	[Serializable]
+	
 	public class ImportUserData
 	{
+		public NamingConvention fileNaming;
 		public string PackingTag;
 		public string TargetDirectory;
 		public bool AutoImport;
@@ -33,5 +42,6 @@ namespace SubjectNerd.PsdImporter
 		public Vector2 DefaultPivot = new Vector2(0.5f, 0.5f);
 		public ScaleFactor ScaleFactor = ScaleFactor.Full;
 
+		public ImportLayerData DocRoot;
 	}
 }
