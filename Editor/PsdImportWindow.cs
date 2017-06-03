@@ -69,10 +69,15 @@ namespace SubjectNerd.PsdImporter
 		fsSerializer serializer;
 		private Type typeTex2D, typeImportUserData;
 		private bool showImportSettings;
-		private List<int[]> quickImport = new List<int[]>(); 
+		private int[] lastSelectedLayer;
+		private readonly List<int[]> quickSelect = new List<int[]>();
+
+		private readonly Dictionary<int[], Rect> layerRectLookup = new Dictionary<int[], Rect>(); 
+		private bool isChangingSelection;
+		private bool selectionChangeState;
 
 		#region UI fields
-		private readonly GUIContent labelLayers = new GUIContent("Layers");
+		private readonly GUIContent labelHeader = new GUIContent("Import PSD Layers");
 		private readonly GUIContent labelFileNaming = new GUIContent("File Names");
 		private readonly GUIContent labelPackTag = new GUIContent("Packing Tag");
 		private readonly GUIContent labelPixelUnit = new GUIContent("Pixels Per Unit");
@@ -85,13 +90,15 @@ namespace SubjectNerd.PsdImporter
 		private readonly GUIContent labelAutoImport = new GUIContent("Auto Import");
 
 		private bool stylesLoaded = false;
-		private GUIStyle styleHeader, styleBoldFoldout, styleDivider,
-						//styleLayerSelected, styleLabelLeft,
+		private GUIStyle styleHeader, styleBoldFoldout,
+						styleLayerEntry, styleLayerSelected, 
 						styleVisOn, styleVisOff,
 						styleToolbar, styleToolSearch, styleToolCancel;
 		private Texture2D icnFolder, icnTexture;
 		private GUILayoutOption layerHeight;
 		private GUILayoutOption noExpandW;
+
+		private GUILayoutOption wImportToggle, wVisible, wLayerDisplay, wPivot, wScaling;
 
 		private Vector2 scrollPos;
 
@@ -114,25 +121,29 @@ namespace SubjectNerd.PsdImporter
 				fontStyle = FontStyle.Bold
 			};
 
-			//styleLabelLeft = new GUIStyle(GUI.skin.label)
-			//{
-			//	alignment = TextAnchor.MiddleLeft,
-			//	padding = new RectOffset(0, 0, 0, 0)
-			//};
+			var tempStyle = GUI.skin.FindStyle("EyeDropperHorizontalLine");
+			
+			styleLayerEntry = new GUIStyle(GUI.skin.box)
+			{
+				margin = new RectOffset(0, 0, 0, 0),
+				padding = new RectOffset(0, 0, 0, 0),
+				contentOffset = new Vector2(0, 0),
+				normal = new GUIStyleState() { background = tempStyle.normal.background }
+			};
 
-			//styleLayerSelected = new GUIStyle(GUI.skin.box)
-			//{
-			//	margin = new RectOffset(0, 0, 0, 0),
-			//	padding = new RectOffset(0, 0, 0, 0),
-			//	contentOffset = new Vector2(0, 0)
-			//};
+			styleLayerSelected = new GUIStyle(GUI.skin.box)
+			{
+				margin = new RectOffset(0, 0, 0, 0),
+				padding = new RectOffset(0, 0, 0, 0),
+				contentOffset = new Vector2(0, 0)
+			};
 
 			styleBoldFoldout = new GUIStyle(EditorStyles.foldout)
 			{
 				fontStyle = FontStyle.Bold
 			};
 
-			var tempStyle = GUI.skin.FindStyle("VisibilityToggle");
+			tempStyle = GUI.skin.FindStyle("VisibilityToggle");
 
 			styleVisOff = new GUIStyle(tempStyle)
 			{
@@ -143,9 +154,6 @@ namespace SubjectNerd.PsdImporter
 				normal = new GUIStyleState() { background = tempStyle.onNormal.background },
 				margin = new RectOffset(10, 10, 3, 3)
 			};
-
-			tempStyle = GUI.skin.FindStyle("EyeDropperHorizontalLine");
-			styleDivider = new GUIStyle(tempStyle);
 
 			styleToolbar = GUI.skin.FindStyle("Toolbar");
 			styleToolSearch = GUI.skin.FindStyle("ToolbarSeachTextField");
@@ -175,7 +183,8 @@ namespace SubjectNerd.PsdImporter
 			importSettings = new ImportUserData();
 			importDisplay = null;
 
-			quickImport.Clear();
+			quickSelect.Clear();
+			lastSelectedLayer = null;
 
 			var filePath = AssetDatabase.GetAssetPath(fileObject);
 			if (filePath.ToLower().EndsWith(".psd") == false)
@@ -329,6 +338,14 @@ namespace SubjectNerd.PsdImporter
 
 		private void DrawLayerTable()
 		{
+			// Calculate the sizes for the columns
+			wImportToggle = GUILayout.MaxWidth(16);
+			wVisible = GUILayout.MaxWidth(16);
+			float width = EditorGUIUtility.currentViewWidth - 60;
+			wLayerDisplay = GUILayout.MaxWidth(width * 0.6f);
+			wPivot = GUILayout.MaxWidth(width * 0.2f);
+			wScaling = GUILayout.MaxWidth(width * 0.2f);
+
 			using (new EditorGUILayout.HorizontalScope(styleToolbar))
 			{
 				EditorGUILayout.DelayedTextField("", styleToolSearch);
@@ -336,22 +353,43 @@ namespace SubjectNerd.PsdImporter
 
 				GUILayout.FlexibleSpace();
 
-				EditorGUILayout.LabelField(labelLayers, styleHeader);
+				EditorGUILayout.LabelField(labelHeader, styleHeader);
 
 				GUILayout.FlexibleSpace();
+			}
+
+			using (new GUILayout.HorizontalScope(styleToolbar))
+			{
+				GUILayout.Space(40);
+				GUILayout.Label("Layer", wLayerDisplay);
+				GUILayout.Label("Pivot", wPivot);
+				GUILayout.Label("Scale", wScaling);
 			}
 
 			using (var scrollView = new EditorGUILayout.ScrollViewScope(scrollPos))
 			{
 				scrollPos = scrollView.scrollPosition;
 
-				DrawLayerContent();
+				DrawLayerContents();
+			}
+
+			EditorGUI.BeginDisabledGroup(importFile == null);
+
+			using (new EditorGUILayout.HorizontalScope())
+			{
+				if (GUILayout.Button("Save Selection"))
+				{
+					AddQuickSelect();
+					Repaint();
+					WriteImportSettings();
+				}
+
+				if (GUILayout.Button("Clear Selection"))
+					quickSelect.Clear();
 			}
 
 			using (new EditorGUILayout.HorizontalScope())
 			{
-				EditorGUI.BeginDisabledGroup(importFile == null);
-
 				var bigButton = GUILayout.Height(30);
 				
 				List<int[]> importIds = new List<int[]>();
@@ -361,20 +399,19 @@ namespace SubjectNerd.PsdImporter
 						importIds.Add(layer.indexId);
 				}, layer => layer.import);
 
-				string textImport = string.Format("Import Selected ({0})", importIds.Count);
-				string textQuickImport = string.Format("Quick Import ({0})", quickImport.Count);
+				string textImport = string.Format("Import Saved ({0})", importIds.Count);
+				string textQuickImport = string.Format("Import Selected ({0})", quickSelect.Count);
 
 				GUILayout.Button(textImport, bigButton);
-				GUILayout.Button("<", bigButton, noExpandW);
 				GUILayout.Button(textQuickImport, bigButton);
-
-				EditorGUI.EndDisabledGroup();
 			}
+			
+			EditorGUI.EndDisabledGroup();
 
 			GUILayout.Box(GUIContent.none, GUILayout.Height(4f), GUILayout.ExpandWidth(true));
 		}
 
-		private void DrawLayerContent()
+		private void DrawLayerContents()
 		{
 			if (importFile == null)
 			{
@@ -388,65 +425,14 @@ namespace SubjectNerd.PsdImporter
 					OpenFile(importFile);
 				return;
 			}
-
+			
 			DrawIterateLayers(importSettings.DocRoot);
-		}
-
-		private void DrawLayerEntry(ImportLayerData layer, DisplayLayerData display)
-		{
-			bool isGroup = layer.Childs.Count > 0;
-
-			using (new GUILayout.HorizontalScope(styleDivider, layerHeight))
-			{
-				bool parentNoImport = ParentWillImport(layer.indexId) == false;
-
-				using (new EditorGUI.DisabledGroupScope(parentNoImport))
-				{
-					var displayImport = layer.import && !parentNoImport;
-					EditorGUI.BeginChangeCheck();
-					displayImport = GUILayout.Toggle(displayImport, GUIContent.none, noExpandW);
-
-					if (EditorGUI.EndChangeCheck() && !parentNoImport)
-						layer.import = displayImport;
-				}
-
-				using (new EditorGUI.DisabledGroupScope(true))
-				{
-					var visStyle = display.isVisible ? styleVisOn : styleVisOff;
-					GUILayout.Label(GUIContent.none, visStyle);
-				}
-
-				GUILayout.Space(indentLevel * indentWidth);
-
-				GUIContent layerContent = new GUIContent()
-				{
-					image = isGroup ? icnFolder : icnTexture,
-					text = layer.name
-				};
-
-				if (isGroup)
-					display.isOpen = EditorGUILayout.Foldout(display.isOpen, layerContent);
-				else
-					EditorGUILayout.LabelField(layerContent, layerHeight);
-
-				using (var didChange = new EditorGUI.ChangeCheckScope())
-				{
-					bool isQuickImport = quickImport.Contains(layer.indexId);
-					isQuickImport = EditorGUILayout.Toggle(GUIContent.none, isQuickImport, noExpandW);
-
-					if (didChange.changed)
-					{
-						if (isQuickImport)
-							quickImport.Add(layer.indexId);
-						else
-							quickImport.Remove(layer.indexId);
-					}
-				}
-			}
 		}
 
 		private void DrawIterateLayers(ImportLayerData layerData)
 		{
+			layerRectLookup.Clear();
+			
 			IterateImportLayerData(layerData,
 				layerCallback: layer =>
 				{
@@ -464,6 +450,157 @@ namespace SubjectNerd.PsdImporter
 				},
 				enterGroupCallback: data => indentLevel++,
 				exitGroupCallback: data => indentLevel--);
+
+			// Process mouse events
+
+			var evt = Event.current;
+			bool willChangeSelection = false;
+			int[] targetLayer = null;
+			foreach (var kvp in layerRectLookup)
+			{
+				if (kvp.Value.Contains(evt.mousePosition))
+				{
+					var checkLayer = GetLayerData(kvp.Key);
+					if (checkLayer == null || checkLayer.Childs == null)
+						continue;
+
+					bool layerIsGroup = checkLayer.Childs.Count > 0;
+
+					if (evt.type == EventType.MouseDown)
+					{
+						willChangeSelection = layerIsGroup == false;
+						bool willAddSelect = quickSelect.Contains(kvp.Key) == false;
+						lastSelectedLayer = willAddSelect ? kvp.Key : null;
+
+						if (willChangeSelection)
+						{
+							isChangingSelection = true;
+							targetLayer = kvp.Key;
+							selectionChangeState = willAddSelect;
+						}
+						else
+						{
+							RecursiveQuickSelect(checkLayer, willAddSelect);
+							Repaint();
+						}
+					}
+
+					if (evt.type == EventType.MouseUp)
+					{
+						isChangingSelection = false;
+					}
+
+					if (isChangingSelection && evt.type == EventType.MouseDrag && layerIsGroup == false)
+					{
+						willChangeSelection = true;
+						targetLayer = kvp.Key;
+					}
+					break;
+				}
+			}
+
+			if (willChangeSelection && targetLayer != null)
+			{
+				SetQuickSelect(targetLayer, selectionChangeState);
+				Repaint();
+			}
+		}
+
+		private void RecursiveQuickSelect(ImportLayerData layer, bool inSelection)
+		{
+			SetQuickSelect(layer.indexId, inSelection);
+			IterateImportLayerData(layer,
+				childLayer =>
+				{
+					if (layer.Childs == null)
+						return;
+					SetQuickSelect(childLayer.indexId, inSelection);
+					if (layer.Childs.Count > 0)
+						RecursiveQuickSelect(childLayer, inSelection);
+				});
+		}
+
+		private void SetQuickSelect(int[] layerIdx, bool inSelection)
+		{
+			bool layerInSelection = quickSelect.Contains(layerIdx);
+			if (inSelection)
+			{
+				if (layerInSelection == false)
+					quickSelect.Add(layerIdx);
+			}
+			else
+			{
+				if (layerInSelection)
+					quickSelect.Remove(layerIdx);
+			}
+		}
+
+		private void AddQuickSelect()
+		{
+			foreach (int[] layerIdx in quickSelect)
+			{
+				var setLayer = GetLayerData(layerIdx);
+				if (setLayer == null)
+					continue;
+				setLayer.import = true;
+			}
+			quickSelect.Clear();
+		}
+
+		private void DrawLayerEntry(ImportLayerData layer, DisplayLayerData display)
+		{
+			bool isGroup = layer.Childs.Count > 0;
+			bool isSelected = quickSelect.Contains(layer.indexId);
+			GUIStyle entryStyle = isSelected ? styleLayerSelected : styleLayerEntry;
+			using (new GUILayout.HorizontalScope(entryStyle, layerHeight))
+			{
+				bool parentNoImport = ParentWillImport(layer.indexId) == false;
+
+				using (new EditorGUI.DisabledGroupScope(parentNoImport))
+				{
+					var displayImport = layer.import && !parentNoImport;
+					EditorGUI.BeginChangeCheck();
+					displayImport = GUILayout.Toggle(displayImport, GUIContent.none, noExpandW, wImportToggle);
+
+					if (EditorGUI.EndChangeCheck() && !parentNoImport)
+						layer.import = displayImport;
+				}
+
+				using (new EditorGUI.DisabledGroupScope(true))
+				{
+					var visStyle = display.isVisible ? styleVisOn : styleVisOff;
+					GUILayout.Label(GUIContent.none, visStyle, wVisible);
+				}
+
+				GUILayout.Space(indentLevel * indentWidth);
+
+				GUIContent layerContent = new GUIContent()
+				{
+					image = isGroup ? icnFolder : icnTexture,
+					text = layer.name
+				};
+
+				if (isGroup)
+				{
+					display.isOpen = EditorGUILayout.Foldout(display.isOpen, layerContent);
+					GUILayout.FlexibleSpace();
+				}
+				else
+				{
+					EditorGUILayout.LabelField(layerContent, layerHeight, wLayerDisplay);
+
+					GUILayout.FlexibleSpace();
+					layer.Alignment = (SpriteAlignment) EditorGUILayout.EnumPopup(GUIContent.none, layer.Alignment, noExpandW, wPivot);
+					//SpriteAlignUI.DrawGUILayout(GUIContent.none, layer.Alignment, alignment => layer.Alignment = alignment);
+					GUILayout.FlexibleSpace();
+					layer.ScaleFactor = (ScaleFactor)EditorGUILayout.EnumPopup(GUIContent.none, layer.ScaleFactor, noExpandW, wScaling);
+					GUILayout.FlexibleSpace();
+				}
+			}
+			
+			Rect layerRect = GUILayoutUtility.GetLastRect();
+			layerRect.xMin += 40;
+			layerRectLookup.Add(layer.indexId, layerRect);
 		}
 
 		private bool ParentWillImport(int[] layerIdx)
@@ -489,6 +626,25 @@ namespace SubjectNerd.PsdImporter
 			DisplayLayerData currentLayer = importDisplay;
 			foreach (int idx in layerIdx)
 			{
+				if (idx < 0 || idx >= currentLayer.Childs.Count)
+					return null;
+				currentLayer = currentLayer.Childs[idx];
+			}
+			return currentLayer;
+		}
+
+		private ImportLayerData GetLayerData(int[] layerIdx)
+		{
+			if (importSettings == null || importSettings.DocRoot == null)
+				return null;
+			if (layerIdx == null)
+				return null;
+
+			ImportLayerData currentLayer = importSettings.DocRoot;
+			foreach (int idx in layerIdx)
+			{
+				if (idx < 0 || idx >= currentLayer.Childs.Count)
+					return null;
 				currentLayer = currentLayer.Childs[idx];
 			}
 			return currentLayer;
@@ -500,16 +656,31 @@ namespace SubjectNerd.PsdImporter
 			{
 				using (new EditorGUILayout.VerticalScope())
 				{
-					if (GUILayout.Button("Save"))
-						WriteImportSettings();
+					string strButton = "Reconstruct";
+					bool canReconstruct = false;
+					if (lastSelectedLayer != null)
+					{
+						var selLayer = GetLayerData(lastSelectedLayer);
+						if (selLayer != null && selLayer.Childs.Count > 0)
+						{
+							canReconstruct = true;
+							strButton = string.Format("Reconstruct {0}", selLayer.name);
+						}
+					}
+
+					using (new EditorGUI.DisabledGroupScope(canReconstruct == false))
+						GUILayout.Button(strButton);
 				}
 
-				GUIContent fileLabel = importFile == null ? labelFile : new GUIContent(importFile.name);
+				using (new EditorGUILayout.VerticalScope())
+				{
+					GUIContent fileLabel = importFile == null ? labelFile : new GUIContent(importFile.name);
 
-				EditorGUI.BeginChangeCheck();
-				importFile = EditorGUILayout.ObjectField(fileLabel, importFile, typeTex2D, false);
-				if (EditorGUI.EndChangeCheck())
-					OpenFile(importFile);
+					EditorGUI.BeginChangeCheck();
+					importFile = EditorGUILayout.ObjectField(fileLabel, importFile, typeTex2D, false);
+					if (EditorGUI.EndChangeCheck())
+						OpenFile(importFile);
+				}
 			}
 		}
 

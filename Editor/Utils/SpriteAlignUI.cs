@@ -28,10 +28,14 @@ public class SpriteAlignUI : PopupWindowContent
 	{
 		using (new EditorGUILayout.HorizontalScope())
 		{
-			EditorGUILayout.PrefixLabel(label);
+			if (label != GUIContent.none)
+			{
+				EditorGUILayout.PrefixLabel(label);
+			}
+
 			float height = EditorGUIUtility.singleLineHeight;
 			Rect rect = GUILayoutUtility.GetRect(10, EditorGUIUtility.currentViewWidth,
-				height, height, EditorStyles.popup);
+												height, height, EditorStyles.popup);
 
 			string text = DisplayCamelCaseString(alignment.ToString());
 			bool didPress = GUI.Button(rect, text, EditorStyles.popup);
