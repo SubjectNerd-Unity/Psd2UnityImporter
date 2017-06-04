@@ -66,19 +66,23 @@ namespace SubjectNerd.PsdImporter
 		private DisplayLayerData importDisplay;
 		private bool settingsChanged;
 
+		private readonly List<int[]> importLayersList = new List<int[]>();
+		private readonly List<int[]> quickSelect = new List<int[]>();
+		private int selectionCount = 0;
+
 		fsSerializer serializer;
 		private Type typeTex2D, typeImportUserData;
 		private bool showImportSettings;
 		private int[] lastSelectedLayer;
-		private readonly List<int[]> quickSelect = new List<int[]>();
 
-		private readonly Dictionary<int[], Rect> layerRectLookup = new Dictionary<int[], Rect>(); 
+		private readonly Dictionary<int[], Rect> layerRectLookup = new Dictionary<int[], Rect>();
 		private bool isChangingSelection;
 		private bool selectionChangeState;
 
 		#region UI fields
 		private readonly GUIContent labelHeader = new GUIContent("Import PSD Layers");
 		private readonly GUIContent labelFileNaming = new GUIContent("File Names");
+		private readonly GUIContent labelGrpMode = new GUIContent("Group Mode");
 		private readonly GUIContent labelPackTag = new GUIContent("Packing Tag");
 		private readonly GUIContent labelPixelUnit = new GUIContent("Pixels Per Unit");
 		private readonly GUIContent labelAlignment = new GUIContent("Pivot");
@@ -91,17 +95,20 @@ namespace SubjectNerd.PsdImporter
 
 		private bool stylesLoaded = false;
 		private GUIStyle styleHeader, styleBoldFoldout,
-						styleLayerEntry, styleLayerSelected, 
+						styleLayerEntry, styleLayerSelected,
 						styleVisOn, styleVisOff,
 						styleToolbar, styleToolSearch, styleToolCancel;
 		private Texture2D icnFolder, icnTexture;
 		private GUILayoutOption layerHeight;
 		private GUILayoutOption noExpandW;
 
-		private GUILayoutOption wImportToggle, wVisible, wLayerDisplay, wPivot, wScaling;
+		// Column widths
+		private Rect rImportToggle, rVisible, rLayerDisplay, rPivot, rScaling, rMakeDefault;
+		private Vector2 rTableSize;
+		private bool tableWillScroll;
+		private float layerEntryYMax;
 
 		private Vector2 scrollPos;
-
 		private int indentLevel = 0;
 		private const float indentWidth = 20;
 
@@ -122,7 +129,7 @@ namespace SubjectNerd.PsdImporter
 			};
 
 			var tempStyle = GUI.skin.FindStyle("EyeDropperHorizontalLine");
-			
+
 			styleLayerEntry = new GUIStyle(GUI.skin.box)
 			{
 				margin = new RectOffset(0, 0, 0, 0),
@@ -238,7 +245,7 @@ namespace SubjectNerd.PsdImporter
 
 				importDisplay = displayData;
 				isOpeningFile = false;
-
+				CollateImportList();
 				Repaint();
 			});
 		}
@@ -323,6 +330,8 @@ namespace SubjectNerd.PsdImporter
 			}
 		}
 
+
+
 		private void OnGUI()
 		{
 			LoadStyles();
@@ -336,16 +345,32 @@ namespace SubjectNerd.PsdImporter
 			EditorGUILayout.Space();
 		}
 
-		private void DrawLayerTable()
+		private float CalculateColumns()
 		{
 			// Calculate the sizes for the columns
-			wImportToggle = GUILayout.MaxWidth(16);
-			wVisible = GUILayout.MaxWidth(16);
-			float width = EditorGUIUtility.currentViewWidth - 60;
-			wLayerDisplay = GUILayout.MaxWidth(width * 0.6f);
-			wPivot = GUILayout.MaxWidth(width * 0.2f);
-			wScaling = GUILayout.MaxWidth(width * 0.2f);
+			var width = EditorGUIUtility.currentViewWidth;
+			var height = EditorGUIUtility.singleLineHeight + 4;
+			rImportToggle = new Rect(10, 2, 16, height);
+			rVisible = new Rect(rImportToggle.xMax + 3, 3, 10, height);
+			rMakeDefault = new Rect(0, 2, 20, EditorGUIUtility.singleLineHeight);
 
+			var distWidth = width - rMakeDefault.width - rVisible.xMax;
+			distWidth -= tableWillScroll ? 40 : 25;
+
+			var pivotWidth = Mathf.Clamp(distWidth * 0.2f, 95, 120);
+			var scaleWidth = Mathf.Clamp(distWidth * 0.2f, 65, 120);
+			var layerWidth = Mathf.Max(distWidth - pivotWidth - scaleWidth, 150);
+			rLayerDisplay = new Rect(rVisible.xMax + 10, 0, layerWidth, height);
+			rPivot = new Rect(rLayerDisplay.xMax + 3, 2, pivotWidth, height);
+			rScaling = new Rect(rPivot.xMax + 3, 2, scaleWidth, height);
+			rMakeDefault.x = rScaling.xMax + 3;
+
+			rTableSize = new Vector2(rMakeDefault.xMax, height);
+			return width;
+		}
+
+		private void DrawLayerTable()
+		{
 			using (new EditorGUILayout.HorizontalScope(styleToolbar))
 			{
 				EditorGUILayout.DelayedTextField("", styleToolSearch);
@@ -358,55 +383,59 @@ namespace SubjectNerd.PsdImporter
 				GUILayout.FlexibleSpace();
 			}
 
-			using (new GUILayout.HorizontalScope(styleToolbar))
-			{
-				GUILayout.Space(40);
-				GUILayout.Label("Layer", wLayerDisplay);
-				GUILayout.Label("Pivot", wPivot);
-				GUILayout.Label("Scale", wScaling);
-			}
-
+			var width = CalculateColumns();
+			
+			var rHeader = GUILayoutUtility.GetRect(width, rTableSize.x, EditorGUIUtility.singleLineHeight, EditorGUIUtility.singleLineHeight);
+			GUI.Box(rHeader, GUIContent.none, styleToolbar);
+			GUI.Label(new Rect(rLayerDisplay) { y = rHeader.y, x = rLayerDisplay.x - scrollPos.x }, "Layer");
+			GUI.Label(new Rect(rPivot) { y = rHeader.y, x = rPivot.x - scrollPos.x }, "Pivot");
+			GUI.Label(new Rect(rScaling) { y = rHeader.y, x = rScaling.x - scrollPos.x }, "Scale");
+			
 			using (var scrollView = new EditorGUILayout.ScrollViewScope(scrollPos))
 			{
 				scrollPos = scrollView.scrollPosition;
-
 				DrawLayerContents();
 			}
 
-			EditorGUI.BeginDisabledGroup(importFile == null);
-
-			using (new EditorGUILayout.HorizontalScope())
+			if (Event.current.type == EventType.Repaint)
 			{
-				if (GUILayout.Button("Save Selection"))
+				var scrollArea = GUILayoutUtility.GetLastRect();
+				var newWillScroll = layerEntryYMax > scrollArea.yMax;
+				if (newWillScroll != tableWillScroll)
 				{
-					AddQuickSelect();
+					tableWillScroll = newWillScroll;
 					Repaint();
-					WriteImportSettings();
+				}
+			}
+
+			using (new EditorGUI.DisabledGroupScope(importFile == null))
+			{
+				var btnW = GUILayout.MaxWidth(EditorGUIUtility.currentViewWidth / 2f);
+				using (new EditorGUILayout.HorizontalScope())
+				{
+					if (GUILayout.Button("Save Selection", btnW))
+					{
+						AddQuickSelect();
+						Repaint();
+						WriteImportSettings();
+					}
+
+					if (GUILayout.Button("Clear Selection", btnW))
+						quickSelect.Clear();
 				}
 
-				if (GUILayout.Button("Clear Selection"))
-					quickSelect.Clear();
-			}
-
-			using (new EditorGUILayout.HorizontalScope())
-			{
-				var bigButton = GUILayout.Height(30);
-				
-				List<int[]> importIds = new List<int[]>();
-				IterateImportLayerData(importSettings.DocRoot, layer =>
+				using (new EditorGUILayout.HorizontalScope())
 				{
-					if (layer.import && layer.Childs.Count == 0)
-						importIds.Add(layer.indexId);
-				}, layer => layer.import);
+					var bigButton = GUILayout.Height(30);
+					string textImport = string.Format("Import Saved ({0})", importLayersList.Count);
+					string textQuickImport = string.Format("Import Selected ({0})", selectionCount);
 
-				string textImport = string.Format("Import Saved ({0})", importIds.Count);
-				string textQuickImport = string.Format("Import Selected ({0})", quickSelect.Count);
+					GUILayout.Button(textImport, bigButton, btnW);
 
-				GUILayout.Button(textImport, bigButton);
-				GUILayout.Button(textQuickImport, bigButton);
+					if (GUILayout.Button(textQuickImport, bigButton, btnW))
+						PsdImporter.ImportLayers(importFile, importSettings, quickSelect);
+				}
 			}
-			
-			EditorGUI.EndDisabledGroup();
 
 			GUILayout.Box(GUIContent.none, GUILayout.Height(4f), GUILayout.ExpandWidth(true));
 		}
@@ -425,14 +454,15 @@ namespace SubjectNerd.PsdImporter
 					OpenFile(importFile);
 				return;
 			}
-			
+
 			DrawIterateLayers(importSettings.DocRoot);
 		}
 
 		private void DrawIterateLayers(ImportLayerData layerData)
 		{
 			layerRectLookup.Clear();
-			
+			layerEntryYMax = 0;
+
 			IterateImportLayerData(layerData,
 				layerCallback: layer =>
 				{
@@ -502,77 +532,57 @@ namespace SubjectNerd.PsdImporter
 			if (willChangeSelection && targetLayer != null)
 			{
 				SetQuickSelect(targetLayer, selectionChangeState);
+				GetSelectCount();
 				Repaint();
 			}
 		}
 
-		private void RecursiveQuickSelect(ImportLayerData layer, bool inSelection)
-		{
-			SetQuickSelect(layer.indexId, inSelection);
-			IterateImportLayerData(layer,
-				childLayer =>
-				{
-					if (layer.Childs == null)
-						return;
-					SetQuickSelect(childLayer.indexId, inSelection);
-					if (layer.Childs.Count > 0)
-						RecursiveQuickSelect(childLayer, inSelection);
-				});
-		}
-
-		private void SetQuickSelect(int[] layerIdx, bool inSelection)
-		{
-			bool layerInSelection = quickSelect.Contains(layerIdx);
-			if (inSelection)
-			{
-				if (layerInSelection == false)
-					quickSelect.Add(layerIdx);
-			}
-			else
-			{
-				if (layerInSelection)
-					quickSelect.Remove(layerIdx);
-			}
-		}
-
-		private void AddQuickSelect()
-		{
-			foreach (int[] layerIdx in quickSelect)
-			{
-				var setLayer = GetLayerData(layerIdx);
-				if (setLayer == null)
-					continue;
-				setLayer.import = true;
-			}
-			quickSelect.Clear();
-		}
-
 		private void DrawLayerEntry(ImportLayerData layer, DisplayLayerData display)
 		{
-			bool isGroup = layer.Childs.Count > 0;
+			bool isGroup = display.isGroup;
 			bool isSelected = quickSelect.Contains(layer.indexId);
 			GUIStyle entryStyle = isSelected ? styleLayerSelected : styleLayerEntry;
+
 			using (new GUILayout.HorizontalScope(entryStyle, layerHeight))
 			{
-				bool parentNoImport = ParentWillImport(layer.indexId) == false;
+				Rect rEntry = GUILayoutUtility.GetRect(rTableSize.x, rTableSize.x, rTableSize.y, rTableSize.y);
 
-				using (new EditorGUI.DisabledGroupScope(parentNoImport))
+				Rect rToggle = new Rect(rImportToggle);
+				Rect rVis = new Rect(rVisible);
+				Rect rLayer = new Rect(rLayerDisplay);
+				Rect rPiv = new Rect(rPivot);
+				Rect rScale = new Rect(rScaling);
+				Rect rReset = new Rect(rMakeDefault);
+				rToggle.y += rEntry.y;
+				rVis.y += rEntry.y;
+				rLayer.y += rEntry.y;
+				rPiv.y += rEntry.y;
+				rScale.y += rEntry.y;
+				rReset.y += rEntry.y;
+
+				bool parentWillImport = ParentWillImport(layer.indexId);
+
+				using (new EditorGUI.DisabledScope(parentWillImport == false))
 				{
-					var displayImport = layer.import && !parentNoImport;
-					EditorGUI.BeginChangeCheck();
-					displayImport = GUILayout.Toggle(displayImport, GUIContent.none, noExpandW, wImportToggle);
+					var displayImport = layer.import && parentWillImport;
 
-					if (EditorGUI.EndChangeCheck() && !parentNoImport)
+					EditorGUI.BeginChangeCheck();
+					displayImport = GUI.Toggle(rToggle, displayImport, GUIContent.none);
+
+					if (EditorGUI.EndChangeCheck() && parentWillImport)
+					{
 						layer.import = displayImport;
+						CollateImportList();
+					}
 				}
 
-				using (new EditorGUI.DisabledGroupScope(true))
+				using (new EditorGUI.DisabledScope(true))
 				{
 					var visStyle = display.isVisible ? styleVisOn : styleVisOff;
-					GUILayout.Label(GUIContent.none, visStyle, wVisible);
+					GUI.Label(rVis, GUIContent.none, visStyle);
 				}
-
-				GUILayout.Space(indentLevel * indentWidth);
+				
+				rLayer.xMin += indentLevel*indentWidth;
 
 				GUIContent layerContent = new GUIContent()
 				{
@@ -580,74 +590,53 @@ namespace SubjectNerd.PsdImporter
 					text = layer.name
 				};
 
+				bool settingsChanged = false;
+
 				if (isGroup)
 				{
-					display.isOpen = EditorGUILayout.Foldout(display.isOpen, layerContent);
-					GUILayout.FlexibleSpace();
+					float min, max;
+					EditorStyles.popup.CalcMinMaxWidth(layerContent, out min, out max);
+					rLayer.width = min;
+					display.isOpen = EditorGUI.Foldout(rLayer, display.isOpen, layerContent);
 				}
 				else
 				{
-					EditorGUILayout.LabelField(layerContent, layerHeight, wLayerDisplay);
+					EditorGUI.LabelField(rLayer, layerContent);
+					using (var check = new EditorGUI.ChangeCheckScope())
+					{
+						layer.Alignment = (SpriteAlignment)EditorGUI.EnumPopup(rPiv, GUIContent.none, layer.Alignment);
+						layer.ScaleFactor = (ScaleFactor)EditorGUI.EnumPopup(rScale, GUIContent.none, layer.ScaleFactor);
 
-					GUILayout.FlexibleSpace();
-					layer.Alignment = (SpriteAlignment) EditorGUILayout.EnumPopup(GUIContent.none, layer.Alignment, noExpandW, wPivot);
-					//SpriteAlignUI.DrawGUILayout(GUIContent.none, layer.Alignment, alignment => layer.Alignment = alignment);
-					GUILayout.FlexibleSpace();
-					layer.ScaleFactor = (ScaleFactor)EditorGUILayout.EnumPopup(GUIContent.none, layer.ScaleFactor, noExpandW, wScaling);
-					GUILayout.FlexibleSpace();
+						if (check.changed)
+						{
+							layer.useDefaults = false;
+							settingsChanged = true;
+						}
+					}
+				}
+				
+				using (new EditorGUI.DisabledGroupScope(layer.useDefaults))
+				{
+					if (GUI.Button(rReset, "R", EditorStyles.miniButton))
+					{
+						settingsChanged = true;
+						layer.useDefaults = true;
+						layer.Pivot = importSettings.DefaultPivot;
+						layer.Alignment = importSettings.DefaultAlignment;
+						layer.ScaleFactor = importSettings.ScaleFactor;
+					}
+				}
+				
+				if (settingsChanged && quickSelect.Contains(layer.indexId))
+				{
+					QuickSelectApplySettings(layer.Alignment, layer.Pivot, layer.ScaleFactor, layer.useDefaults);
 				}
 			}
-			
+
 			Rect layerRect = GUILayoutUtility.GetLastRect();
 			layerRect.xMin += 40;
 			layerRectLookup.Add(layer.indexId, layerRect);
-		}
-
-		private bool ParentWillImport(int[] layerIdx)
-		{
-			bool willImport = true;
-			ImportLayerData currentLayer = importSettings.DocRoot;
-			for (int i = 0; i < layerIdx.Length - 1; i++)
-			{
-				int idx = layerIdx[i];
-				currentLayer = currentLayer.Childs[idx];
-				willImport &= currentLayer.import;
-				if (willImport == false)
-					break;
-			}
-			return willImport;
-		}
-
-		private DisplayLayerData GetDisplayData(int[] layerIdx)
-		{
-			if (importDisplay == null || layerIdx == null)
-				return null;
-
-			DisplayLayerData currentLayer = importDisplay;
-			foreach (int idx in layerIdx)
-			{
-				if (idx < 0 || idx >= currentLayer.Childs.Count)
-					return null;
-				currentLayer = currentLayer.Childs[idx];
-			}
-			return currentLayer;
-		}
-
-		private ImportLayerData GetLayerData(int[] layerIdx)
-		{
-			if (importSettings == null || importSettings.DocRoot == null)
-				return null;
-			if (layerIdx == null)
-				return null;
-
-			ImportLayerData currentLayer = importSettings.DocRoot;
-			foreach (int idx in layerIdx)
-			{
-				if (idx < 0 || idx >= currentLayer.Childs.Count)
-					return null;
-				currentLayer = currentLayer.Childs[idx];
-			}
-			return currentLayer;
+			layerEntryYMax = Mathf.Max(layerEntryYMax, layerRect.yMax);
 		}
 
 		private void DrawPsdOperations()
@@ -694,10 +683,19 @@ namespace SubjectNerd.PsdImporter
 			EditorGUI.BeginDisabledGroup(importFile == null);
 
 			EditorGUI.BeginChangeCheck();
+			
+			DrawPathPicker();
 
 			importSettings.fileNaming = (NamingConvention)EditorGUILayout.EnumPopup(labelFileNaming, importSettings.fileNaming);
 
-			DrawPathPicker();
+			if (importSettings.fileNaming != NamingConvention.LayerNameOnly)
+			{
+				EditorGUI.indentLevel++;
+				importSettings.groupMode = (GroupMode) EditorGUILayout.EnumPopup(labelGrpMode, importSettings.groupMode);
+				EditorGUI.indentLevel--;
+			}
+
+			EditorGUILayout.Space();
 
 			importSettings.PackingTag = EditorGUILayout.TextField(labelPackTag, importSettings.PackingTag);
 			importPPU = EditorGUILayout.FloatField(labelPixelUnit, importPPU);
@@ -706,7 +704,7 @@ namespace SubjectNerd.PsdImporter
 			{
 				importSettings.DefaultAlignment = newAlign;
 				settingsChanged = true;
-				Repaint();
+				ApplyDefaultSettings();
 			});
 
 			if (importSettings.DefaultAlignment == SpriteAlignment.Custom)
@@ -726,8 +724,9 @@ namespace SubjectNerd.PsdImporter
 				settingsChanged = true;
 				importSettings.DefaultPivot.x = Mathf.Clamp01(importSettings.DefaultPivot.x);
 				importSettings.DefaultPivot.y = Mathf.Clamp01(importSettings.DefaultPivot.y);
+				ApplyDefaultSettings();
 			}
-			
+
 			using (new EditorGUI.DisabledGroupScope(settingsChanged == false))
 			{
 				if (GUILayout.Button("Apply"))
@@ -738,6 +737,41 @@ namespace SubjectNerd.PsdImporter
 			EditorGUI.indentLevel--;
 		}
 
+		private void QuickSelectApplySettings(SpriteAlignment alignment, Vector2 pivot, ScaleFactor scale, bool defaults)
+		{
+			if (defaults)
+			{
+				alignment = importSettings.DefaultAlignment;
+				pivot = importSettings.DefaultPivot;
+				scale = importSettings.ScaleFactor;
+			}
+			foreach (int[] layerIdx in quickSelect)
+			{
+				var layer = GetLayerData(layerIdx);
+				if (layer == null || layer.Childs.Count > 0)
+					continue;
+				layer.useDefaults = defaults;
+				layer.Alignment = alignment;
+				layer.Pivot = pivot;
+				layer.ScaleFactor = scale;
+			}
+		}
+
+		private void ApplyDefaultSettings()
+		{
+			IterateImportLayerData(importSettings.DocRoot,
+				layerCallback: layer =>
+				{
+					if (layer.useDefaults)
+					{
+						layer.Alignment = importSettings.DefaultAlignment;
+						layer.Pivot = importSettings.DefaultPivot;
+						layer.ScaleFactor = importSettings.ScaleFactor;
+					}
+				});
+			Repaint();
+		}
+
 		private void DrawPathPicker()
 		{
 			using (new GUILayout.HorizontalScope())
@@ -745,11 +779,6 @@ namespace SubjectNerd.PsdImporter
 				//EditorGUILayout.PrefixLabel("Import Path");
 
 				string displayPath = importSettings.TargetDirectory;
-				if (string.IsNullOrEmpty(displayPath) == false)
-				{
-					if (displayPath.StartsWith("Assets/"))
-						displayPath = displayPath.Substring(7);
-				}
 
 				EditorGUI.BeginChangeCheck();
 				string userPath = EditorGUILayout.DelayedTextField(labelPath, displayPath, GUILayout.ExpandWidth(true));
@@ -757,6 +786,8 @@ namespace SubjectNerd.PsdImporter
 				{
 					if (string.IsNullOrEmpty(userPath) == false)
 						userPath = string.Format("Assets/{0}", userPath);
+					else
+						userPath = importPath.Substring(0, importPath.LastIndexOf("/"));
 					if (AssetDatabase.IsValidFolder(userPath))
 						importSettings.TargetDirectory = userPath;
 				}
@@ -766,9 +797,7 @@ namespace SubjectNerd.PsdImporter
 					GUI.FocusControl(null);
 					string openPath = importSettings.TargetDirectory;
 					if (string.IsNullOrEmpty(openPath))
-					{
 						openPath = importPath.Substring(0, importPath.LastIndexOf("/"));
-					}
 
 					openPath = EditorUtility.SaveFolderPanel("Export Path", openPath, "");
 
@@ -776,11 +805,118 @@ namespace SubjectNerd.PsdImporter
 					if (inPath < 0 || Application.dataPath.Length == openPath.Length)
 						openPath = string.Empty;
 					else
-						openPath = openPath.Substring(Application.dataPath.Length + 1);
+						openPath = openPath.Substring(Application.dataPath.LastIndexOf("/") + 1);
 
 					importSettings.TargetDirectory = openPath;
 				}
 			}
+		}
+
+		private void RecursiveQuickSelect(ImportLayerData layer, bool inSelection)
+		{
+			SetQuickSelect(layer.indexId, inSelection);
+			IterateImportLayerData(layer,
+				childLayer =>
+				{
+					if (layer.Childs == null)
+						return;
+					SetQuickSelect(childLayer.indexId, inSelection);
+					if (layer.Childs.Count > 0)
+						RecursiveQuickSelect(childLayer, inSelection);
+				});
+			GetSelectCount();
+		}
+
+		private void SetQuickSelect(int[] layerIdx, bool inSelection)
+		{
+			bool layerInSelection = quickSelect.Contains(layerIdx);
+			if (inSelection)
+			{
+				if (layerInSelection == false)
+					quickSelect.Add(layerIdx);
+			}
+			else
+			{
+				if (layerInSelection)
+					quickSelect.Remove(layerIdx);
+			}
+		}
+
+		private void AddQuickSelect()
+		{
+			foreach (int[] layerIdx in quickSelect)
+			{
+				var setLayer = GetLayerData(layerIdx);
+				if (setLayer == null)
+					continue;
+				setLayer.import = true;
+			}
+			quickSelect.Clear();
+		}
+
+		private bool ParentWillImport(int[] layerIdx)
+		{
+			bool willImport = true;
+			ImportLayerData currentLayer = importSettings.DocRoot;
+			for (int i = 0; i < layerIdx.Length - 1; i++)
+			{
+				int idx = layerIdx[i];
+				currentLayer = currentLayer.Childs[idx];
+				willImport &= currentLayer.import;
+				if (willImport == false)
+					break;
+			}
+			return willImport;
+		}
+
+		private void CollateImportList()
+		{
+			importLayersList.Clear();
+			IterateImportLayerData(
+				importSettings.DocRoot,
+				layerCallback: layer =>
+				{
+					if (layer.import && layer.Childs.Count == 0)
+						importLayersList.Add(layer.indexId);
+				},
+				canEnterGroup: layer => layer.import
+			);
+		}
+
+		private void GetSelectCount()
+		{
+			selectionCount = 0;
+			foreach (int[] layerIdx in quickSelect)
+			{
+				var layer = GetLayerData(layerIdx);
+				if (layer == null)
+					continue;
+				if (layer.Childs.Count == 0)
+					selectionCount++;
+			}
+		}
+
+		private DisplayLayerData GetDisplayData(int[] layerIdx)
+		{
+			if (importDisplay == null || layerIdx == null)
+				return null;
+
+			DisplayLayerData currentLayer = importDisplay;
+			foreach (int idx in layerIdx)
+			{
+				if (idx < 0 || idx >= currentLayer.Childs.Count)
+					return null;
+				currentLayer = currentLayer.Childs[idx];
+			}
+			return currentLayer;
+		}
+
+		private ImportLayerData GetLayerData(int[] layerIdx)
+		{
+			if (importSettings == null || layerIdx == null)
+				return null;
+
+			return importSettings.GetLayerData(layerIdx);
 		}
 
 		private void WriteImportSettings()
@@ -808,6 +944,7 @@ namespace SubjectNerd.PsdImporter
 			AssetDatabase.ImportAsset(importPath, ImportAssetOptions.ForceUpdate);
 
 			settingsChanged = false;
+			CollateImportList();
 		}
 	}
 }

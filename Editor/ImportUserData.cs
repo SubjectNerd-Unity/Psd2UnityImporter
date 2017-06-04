@@ -14,8 +14,14 @@ namespace SubjectNerd.PsdImporter
 	public enum NamingConvention
 	{
 		LayerNameOnly,
-		PrefixGroupNames,
-		CreateGroupFolders
+		CreateGroupFolders,
+        PrefixGroupNames
+	}
+
+	public enum GroupMode
+	{
+		ParentOnly,
+		FullPath
 	}
 	
 	public class ImportLayerData
@@ -35,6 +41,7 @@ namespace SubjectNerd.PsdImporter
 	public class ImportUserData
 	{
 		public NamingConvention fileNaming;
+		public GroupMode groupMode;
 		public string PackingTag;
 		public string TargetDirectory;
 		public bool AutoImport;
@@ -43,5 +50,20 @@ namespace SubjectNerd.PsdImporter
 		public ScaleFactor ScaleFactor = ScaleFactor.Full;
 
 		public ImportLayerData DocRoot;
+
+		public ImportLayerData GetLayerData(int[] layerIdx)
+		{
+			if (DocRoot == null)
+				return null;
+
+			ImportLayerData currentLayer = DocRoot;
+			foreach (int idx in layerIdx)
+			{
+				if (idx < 0 || idx >= currentLayer.Childs.Count)
+					return null;
+				currentLayer = currentLayer.Childs[idx];
+			}
+			return currentLayer;
+		}
 	}
 }

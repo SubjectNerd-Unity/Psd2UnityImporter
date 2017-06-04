@@ -24,9 +24,16 @@ public class SpriteAlignUI : PopupWindowContent
 		return new string(chars.ToArray());
 	}
 
-	public static void DrawGUILayout(GUIContent label, SpriteAlignment alignment, Action<SpriteAlignment> callback)
+	public static void Popup(Rect rect, SpriteAlignment alignment, Action<SpriteAlignment> callback)
 	{
-		using (new EditorGUILayout.HorizontalScope())
+		var popup = new SpriteAlignUI();
+		popup.SetData(rect, alignment, callback);
+		PopupWindow.Show(rect, popup);
+	}
+
+	public static void DrawGUILayout(GUIContent label, SpriteAlignment alignment, Action<SpriteAlignment> callback, params GUILayoutOption[] layoutOptions)
+	{
+		using (new EditorGUILayout.HorizontalScope(layoutOptions))
 		{
 			if (label != GUIContent.none)
 			{
@@ -38,20 +45,17 @@ public class SpriteAlignUI : PopupWindowContent
 												height, height, EditorStyles.popup);
 
 			string text = DisplayCamelCaseString(alignment.ToString());
-			bool didPress = GUI.Button(rect, text, EditorStyles.popup);
 
-			if (didPress)
-			{
-				var popup = new SpriteAlignUI();
-				popup.SetData(rect, alignment, callback);
-				PopupWindow.Show(rect, popup);
-			}
+			if (GUI.Button(rect, text, EditorStyles.popup))
+				Popup(rect, alignment, callback);
 		}
 	}
 
 	public static void DrawGUI(Rect position, GUIContent label, SpriteAlignment alignment, Action<SpriteAlignment> callback)
 	{
-		Rect rectButton = EditorGUI.PrefixLabel(position, label);
+		Rect rectButton = position;
+		if (label != GUIContent.none)
+			rectButton = EditorGUI.PrefixLabel(position, label);
 
 		string text = DisplayCamelCaseString(alignment.ToString());
 		bool didPress = GUI.Button(rectButton, text, EditorStyles.popup);
