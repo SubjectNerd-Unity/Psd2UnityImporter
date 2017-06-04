@@ -365,10 +365,15 @@ namespace SubjectNerd.PsdImporter
 			// Create the folder if non existent
 			if (AssetDatabase.IsValidFolder(fileDir) == false)
 			{
-				int lastSeparator = fileDir.LastIndexOf("/");
-				string parentFolder = fileDir.Substring(0, lastSeparator);
-				string createDir = fileDir.Substring(lastSeparator + 1);
-				AssetDatabase.CreateFolder(parentFolder, createDir);
+				var subPaths = fileDir.Split('/');
+				string parentFolder = subPaths[0];
+				foreach (string folder in subPaths.Skip(1))
+				{
+					string targetFolder = string.Format("{0}/{1}", parentFolder, folder);
+					if (AssetDatabase.IsValidFolder(targetFolder) == false)
+						AssetDatabase.CreateFolder(parentFolder, folder);
+					parentFolder = targetFolder;
+				}
 			}
 
 			// Write out the texture contents into the file
