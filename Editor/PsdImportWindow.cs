@@ -266,17 +266,18 @@ namespace SubjectNerd.PsdImporter
 
 			// Flatten out stored to a dictionary, using the path as keys
 			Dictionary<string, ImportLayerData> storedIndex = new Dictionary<string, ImportLayerData>();
-			IterateImportLayerData(storedData,
+			storedData.Iterate(
 				layerCallback: layer =>
 				{
 					if (storedIndex.ContainsKey(layer.path) == false)
 						storedIndex.Add(layer.path, layer);
 					else
 						storedIndex[layer.path] = layer;
-				});
+				}
+			);
 
 			// Iterate through the built data now, checking for settings from storedIndex
-			IterateImportLayerData(builtData,
+			builtData.Iterate(
 				layerCallback: layer =>
 				{
 					ImportLayerData existingSettings;
@@ -288,51 +289,11 @@ namespace SubjectNerd.PsdImporter
 						layer.ScaleFactor = existingSettings.ScaleFactor;
 						layer.import = existingSettings.import;
 					}
-				});
+				}
+			);
 
 			return builtData;
 		}
-
-		private void IterateImportLayerData(ImportLayerData layerData,
-			Action<ImportLayerData> layerCallback,
-			Func<ImportLayerData, bool> canEnterGroup = null,
-			Action<ImportLayerData> enterGroupCallback = null,
-			Action<ImportLayerData> exitGroupCallback = null)
-		{
-			var layerChilds = layerData.Childs;
-			for (int i = layerChilds.Count - 1; i >= 0; i--)
-			{
-				var layer = layerChilds[i];
-				if (layer == null)
-					continue;
-
-				if (layerCallback != null)
-					layerCallback(layer);
-
-				bool isGroup = layer.Childs.Count > 0;
-
-				if (isGroup)
-				{
-					bool enterGroup = true;
-					if (canEnterGroup != null)
-						enterGroup = canEnterGroup(layer);
-
-					if (enterGroup)
-					{
-						if (enterGroupCallback != null)
-							enterGroupCallback(layer);
-
-						IterateImportLayerData(layer, layerCallback, canEnterGroup,
-							enterGroupCallback, exitGroupCallback);
-
-						if (exitGroupCallback != null)
-							exitGroupCallback(layer);
-					}
-				}
-			}
-		}
-
-
 
 		private void OnGUI()
 		{
@@ -473,8 +434,8 @@ namespace SubjectNerd.PsdImporter
 		{
 			layerRectLookup.Clear();
 			layerEntryYMax = 0;
-
-			IterateImportLayerData(layerData,
+			
+			layerData.Iterate(
 				layerCallback: layer =>
 				{
 					var display = GetDisplayData(layer.indexId);
@@ -497,7 +458,8 @@ namespace SubjectNerd.PsdImporter
 					return display.isOpen;
 				},
 				enterGroupCallback: data => indentLevel++,
-				exitGroupCallback: data => indentLevel--);
+				exitGroupCallback: data => indentLevel--
+			);
 
 			// Process mouse events
 
@@ -594,6 +556,9 @@ namespace SubjectNerd.PsdImporter
 					{
 						layer.import = displayImport;
 						CollateImportList();
+						quickSelect.Clear();
+						selectionCount = 0;
+						lastSelectedLayer = null;
 					}
 				}
 
@@ -781,7 +746,7 @@ namespace SubjectNerd.PsdImporter
 
 		private void ApplyDefaultSettings()
 		{
-			IterateImportLayerData(importSettings.DocRoot,
+			importSettings.DocRoot.Iterate(
 				layerCallback: layer =>
 				{
 					if (layer.useDefaults)
@@ -790,7 +755,8 @@ namespace SubjectNerd.PsdImporter
 						layer.Pivot = importSettings.DefaultPivot;
 						layer.ScaleFactor = importSettings.ScaleFactor;
 					}
-				});
+				}
+			);
 			Repaint();
 		}
 
@@ -837,15 +803,15 @@ namespace SubjectNerd.PsdImporter
 		private void RecursiveQuickSelect(ImportLayerData layer, bool inSelection)
 		{
 			SetQuickSelect(layer.indexId, inSelection);
-			IterateImportLayerData(layer,
+			layer.Iterate(
 				childLayer =>
 				{
 					if (layer.Childs == null)
 						return;
-					SetQuickSelect(childLayer.indexId, inSelection);
-					if (layer.Childs.Count > 0)
-						RecursiveQuickSelect(childLayer, inSelection);
-				});
+					if (childLayer.import)
+						SetQuickSelect(childLayer.indexId, inSelection);
+				}
+			);
 			GetSelectCount();
 		}
 
@@ -894,8 +860,7 @@ namespace SubjectNerd.PsdImporter
 		private void CollateImportList()
 		{
 			importLayersList.Clear();
-			IterateImportLayerData(
-				importSettings.DocRoot,
+			importSettings.DocRoot.Iterate(
 				layerCallback: layer =>
 				{
 					if (layer.import && layer.Childs.Count == 0)

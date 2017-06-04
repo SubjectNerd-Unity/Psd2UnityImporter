@@ -36,6 +36,42 @@ namespace SubjectNerd.PsdImporter
 		public ScaleFactor ScaleFactor;
 
 		public List<ImportLayerData> Childs;
+
+		public void Iterate(Action<ImportLayerData> layerCallback,
+							Func<ImportLayerData, bool> canEnterGroup = null,
+							Action<ImportLayerData> enterGroupCallback = null,
+							Action<ImportLayerData> exitGroupCallback = null)
+		{
+			for (int i = Childs.Count - 1; i >= 0; i--)
+			{
+				var layer = Childs[i];
+				if (layer == null)
+					continue;
+
+				if (layerCallback != null)
+					layerCallback(layer);
+
+				bool isGroup = layer.Childs.Count > 0;
+
+				if (isGroup)
+				{
+					bool enterGroup = true;
+					if (canEnterGroup != null)
+						enterGroup = canEnterGroup(layer);
+
+					if (enterGroup)
+					{
+						if (enterGroupCallback != null)
+							enterGroupCallback(layer);
+
+						layer.Iterate(layerCallback, canEnterGroup, enterGroupCallback, exitGroupCallback);
+
+						if (exitGroupCallback != null)
+							exitGroupCallback(layer);
+					}
+				}
+			}
+		}
 	}
 	
 	public class ImportUserData
