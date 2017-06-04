@@ -266,40 +266,82 @@ namespace SubjectNerd.PsdImporter
 		#endregion
 
 		#region Layer Asset Import
-		public static List<Sprite> ImportLayers(Object psdFile, ImportUserData importSettings, List<int[]> layerIndices)
+		public static void ImportLayersUI(Object psdFile, ImportUserData importSettings, List<int[]> layerIndices)
+		{
+			int total = layerIndices.Count;
+			EditorCoroutineRunner.StartCoroutineWithUI(
+				ImportCoroutine(psdFile, importSettings, layerIndices, true,
+					layerCallback: (current, layer) =>
+					{
+						string text = string.Format("[{0}/{1}] Layer: {2}", current, total, layer.name);
+						float percent = (float)current/total;
+						EditorCoroutineRunner.UpdateUI(text, percent);
+					}
+				), "Importing PSD Layers", true
+			);
+		}
+
+		public static void ImportLayers(Object psdFile, ImportUserData importSettings, List<int[]> layerIndices, Action<List<Sprite>> callback = null)
+		{
+			EditorCoroutineRunner.StartCoroutine(
+				ImportCoroutine(psdFile, importSettings, layerIndices, false, completeCallback: callback)
+			);
+		}
+
+		private static IEnumerator ImportCoroutine(Object psdFile, ImportUserData importSettings,
+													List<int[]> layerIndices, bool doYield = false,
+													Action<int, ImportLayerData> layerCallback = null,
+													Action<List<Sprite>> completeCallback = null)
 		{
 			string filepath = GetPsdFilepath(psdFile);
 			if (string.IsNullOrEmpty(filepath))
-				return null;
+			{
+				if (completeCallback != null)
+					completeCallback(null);
+				yield break;
+			}
 
+			// No target directory set, use PSD file directory
 			if (string.IsNullOrEmpty(importSettings.TargetDirectory))
 				importSettings.TargetDirectory = filepath.Substring(0, filepath.LastIndexOf("/"));
-			
+
 			// Get the texture importer for the PSD
 			TextureImporter psdUnitySettings = (TextureImporter)AssetImporter.GetAtPath(filepath);
 			TextureImporterSettings psdUnityImport = new TextureImporterSettings();
 			psdUnitySettings.ReadTextureSettings(psdUnityImport);
+
+			int importCurrent = 0;
 
 			List<Sprite> sprites = new List<Sprite>();
 			using (PsdDocument psd = PsdDocument.Create(filepath))
 			{
 				foreach (int[] layerIdx in layerIndices)
 				{
-					var sprite = ImportLayer(psd, importSettings, psdUnityImport, layerIdx);
+					ImportLayerData layerSettings = importSettings.GetLayerData(layerIdx);
+					if (layerSettings == null)
+						continue;
+
+					if (layerCallback != null)
+						layerCallback(importCurrent, layerSettings);
+
+					var sprite = ImportLayer(psd, importSettings, layerSettings, psdUnityImport);
 					sprites.Add(sprite);
+					importCurrent++;
+
+					if (doYield)
+						yield return null;
 				}
 			}
-			AssetDatabase.Refresh();
-			return sprites;
+			if (completeCallback != null)
+				completeCallback(sprites);
 		}
 
-		private static Sprite ImportLayer(PsdDocument psdDoc, ImportUserData importSettings, TextureImporterSettings psdUnityImport, int[] layerIdx)
+		private static Sprite ImportLayer(PsdDocument psdDoc, ImportUserData importSettings, ImportLayerData layerSettings, TextureImporterSettings psdUnityImport)
 		{
-			ImportLayerData layerSettings = importSettings.GetLayerData(layerIdx);
 			if (layerSettings == null)
 				return null;
 
-			PsdLayer psdLayer = GetPsdLayerByIndex(psdDoc, layerIdx);
+			PsdLayer psdLayer = GetPsdLayerByIndex(psdDoc, layerSettings.indexId);
 			if (psdLayer.IsGroup)
 				return null;
 			
@@ -308,24 +350,34 @@ namespace SubjectNerd.PsdImporter
 			if (layerTexture == null)
 				return null;
 
+			// Save the texture as an asset
+			Sprite layerSprite = SaveAsset(psdLayer, psdUnityImport, layerTexture, importSettings, layerSettings);
+			return layerSprite;
+		}
+
+		private static Sprite SaveAsset(PsdLayer psdLayer, TextureImporterSettings psdUnityImport,
+									Texture2D texture, ImportUserData importSettings, ImportLayerData layerSettings)
+		{
 			// Generate the file path for this layer
 			string fileDir;
 			string filepath = GetFilePath(psdLayer, importSettings, out fileDir);
+
+			// Create the folder if non existent
 			if (AssetDatabase.IsValidFolder(fileDir) == false)
 			{
 				int lastSeparator = fileDir.LastIndexOf("/");
 				string parentFolder = fileDir.Substring(0, lastSeparator);
-				string createDir = fileDir.Substring(lastSeparator+1);
+				string createDir = fileDir.Substring(lastSeparator + 1);
 				AssetDatabase.CreateFolder(parentFolder, createDir);
 			}
-			
-			// Write out the texture contents into the file
-			byte[] buf = layerTexture.EncodeToPNG();
-			File.WriteAllBytes(filepath, buf);
-			AssetDatabase.ImportAsset(filepath, ImportAssetOptions.ForceUpdate);
 
-			// Load the texture so we can change import settings
-			var textureObj = AssetDatabase.LoadAssetAtPath(filepath, typeof(Texture2D));
+			// Write out the texture contents into the file
+			AssetDatabase.CreateAsset(texture, filepath);
+			byte[] buf = texture.EncodeToPNG();
+			File.WriteAllBytes(filepath, buf);
+
+			AssetDatabase.ImportAsset(filepath, ImportAssetOptions.ForceUpdate);
+			Texture2D textureObj = AssetDatabase.LoadAssetAtPath<Texture2D>(filepath);
 
 			// Get the texture importer for the asset
 			TextureImporter textureImporter = (TextureImporter)AssetImporter.GetAtPath(filepath);
@@ -341,10 +393,10 @@ namespace SubjectNerd.PsdImporter
 			texSetting.wrapMode = psdUnityImport.wrapMode;
 			texSetting.textureType = TextureImporterType.Sprite;
 			texSetting.spriteMode = (int)SpriteImportMode.Single;
+			texSetting.mipmapEnabled = false;
 			texSetting.alphaIsTransparency = true;
+			texSetting.npotScale = TextureImporterNPOTScale.None;
 			// Set the rest of the texture settings
-			textureImporter.textureType = TextureImporterType.Sprite;
-			textureImporter.spriteImportMode = SpriteImportMode.Single;
 			textureImporter.spritePackingTag = importSettings.PackingTag;
 			// Write in the texture import settings
 			textureImporter.SetTextureSettings(texSetting);
@@ -352,11 +404,10 @@ namespace SubjectNerd.PsdImporter
 			EditorUtility.SetDirty(textureObj);
 			AssetDatabase.WriteImportSettingsIfDirty(filepath);
 			AssetDatabase.ImportAsset(filepath, ImportAssetOptions.ForceUpdate);
-
 			return (Sprite)AssetDatabase.LoadAssetAtPath(filepath, typeof(Sprite));
 		}
 
-		private static string GetFilePath(PsdLayer layer, ImportUserData importSettings, out string dir)
+		public static string GetFilePath(PsdLayer layer, ImportUserData importSettings, out string dir)
 		{
 			string filename = string.Format("{0}.png", layer.Name);
 

@@ -78,6 +78,7 @@ namespace SubjectNerd.PsdImporter
 		private readonly Dictionary<int[], Rect> layerRectLookup = new Dictionary<int[], Rect>();
 		private bool isChangingSelection;
 		private bool selectionChangeState;
+		private string searchFilter = "";
 
 		#region UI fields
 		private readonly GUIContent labelHeader = new GUIContent("Import PSD Layers");
@@ -190,6 +191,7 @@ namespace SubjectNerd.PsdImporter
 			importSettings = new ImportUserData();
 			importDisplay = null;
 
+			selectionCount = 0;
 			quickSelect.Clear();
 			lastSelectedLayer = null;
 
@@ -373,8 +375,12 @@ namespace SubjectNerd.PsdImporter
 		{
 			using (new EditorGUILayout.HorizontalScope(styleToolbar))
 			{
-				EditorGUILayout.DelayedTextField("", styleToolSearch);
-				GUILayout.Button(GUIContent.none, styleToolCancel);
+				searchFilter = EditorGUILayout.TextField(searchFilter, styleToolSearch);
+				if (GUILayout.Button(GUIContent.none, styleToolCancel))
+				{
+					searchFilter = string.Empty;
+					GUI.FocusControl(null);
+				}
 
 				GUILayout.FlexibleSpace();
 
@@ -421,7 +427,11 @@ namespace SubjectNerd.PsdImporter
 					}
 
 					if (GUILayout.Button("Clear Selection", btnW))
+					{
 						quickSelect.Clear();
+						selectionCount = 0;
+						lastSelectedLayer = null;
+					}
 				}
 
 				using (new EditorGUILayout.HorizontalScope())
@@ -430,10 +440,11 @@ namespace SubjectNerd.PsdImporter
 					string textImport = string.Format("Import Saved ({0})", importLayersList.Count);
 					string textQuickImport = string.Format("Import Selected ({0})", selectionCount);
 
-					GUILayout.Button(textImport, bigButton, btnW);
+					if (GUILayout.Button(textImport, bigButton, btnW))
+						PsdImporter.ImportLayersUI(importFile, importSettings, importLayersList);
 
 					if (GUILayout.Button(textQuickImport, bigButton, btnW))
-						PsdImporter.ImportLayers(importFile, importSettings, quickSelect);
+						PsdImporter.ImportLayersUI(importFile, importSettings, quickSelect);
 				}
 			}
 
@@ -469,6 +480,13 @@ namespace SubjectNerd.PsdImporter
 					var display = GetDisplayData(layer.indexId);
 					if (display == null)
 						return;
+
+					if (string.IsNullOrEmpty(searchFilter) == false)
+					{
+						if (layer.name.ToLower().Contains(searchFilter.ToLower()) == false)
+							return;
+					}
+
 					DrawLayerEntry(layer, display);
 				},
 				canEnterGroup: layer =>
@@ -500,7 +518,8 @@ namespace SubjectNerd.PsdImporter
 					{
 						willChangeSelection = layerIsGroup == false;
 						bool willAddSelect = quickSelect.Contains(kvp.Key) == false;
-						lastSelectedLayer = willAddSelect ? kvp.Key : null;
+						if (willAddSelect)
+							lastSelectedLayer = kvp.Key;
 
 						if (willChangeSelection)
 						{
@@ -511,6 +530,8 @@ namespace SubjectNerd.PsdImporter
 						else
 						{
 							RecursiveQuickSelect(checkLayer, willAddSelect);
+							if (willAddSelect == false)
+								lastSelectedLayer = null;
 							Repaint();
 						}
 					}
@@ -602,6 +623,7 @@ namespace SubjectNerd.PsdImporter
 				else
 				{
 					EditorGUI.LabelField(rLayer, layerContent);
+
 					using (var check = new EditorGUI.ChangeCheckScope())
 					{
 						layer.Alignment = (SpriteAlignment)EditorGUI.EnumPopup(rPiv, GUIContent.none, layer.Alignment);
@@ -613,17 +635,17 @@ namespace SubjectNerd.PsdImporter
 							settingsChanged = true;
 						}
 					}
-				}
-				
-				using (new EditorGUI.DisabledGroupScope(layer.useDefaults))
-				{
-					if (GUI.Button(rReset, "R", EditorStyles.miniButton))
+
+					using (new EditorGUI.DisabledGroupScope(layer.useDefaults))
 					{
-						settingsChanged = true;
-						layer.useDefaults = true;
-						layer.Pivot = importSettings.DefaultPivot;
-						layer.Alignment = importSettings.DefaultAlignment;
-						layer.ScaleFactor = importSettings.ScaleFactor;
+						if (GUI.Button(rReset, "R", EditorStyles.miniButton))
+						{
+							settingsChanged = true;
+							layer.useDefaults = true;
+							layer.Pivot = importSettings.DefaultPivot;
+							layer.Alignment = importSettings.DefaultAlignment;
+							layer.ScaleFactor = importSettings.ScaleFactor;
+						}
 					}
 				}
 				
