@@ -441,17 +441,17 @@ namespace SubjectNerd.PsdImporter
 			if (string.IsNullOrEmpty(folder) == false)
 				finalDir = string.Format("{0}/{1}", finalDir, folder);
 			// Sanitize directory
-			finalDir = CleanText(finalDir, Path.GetInvalidPathChars());
+			finalDir = SanitizeString(finalDir, Path.GetInvalidPathChars());
 
 			// Sanitize filename
-			filename = CleanText(filename, Path.GetInvalidFileNameChars());
+			filename = SanitizeString(filename, Path.GetInvalidFileNameChars());
 
 			string filepath = string.Format("{0}/{1}", finalDir, filename);
 			dir = finalDir;
 			return filepath;
 		}
 
-		private static string CleanText(string text, char[] cleanChars)
+		private static string SanitizeString(string text, char[] cleanChars)
 		{
 			text = string.Join("_", text.Split(cleanChars));
 			text = new string(text.Select(c =>
