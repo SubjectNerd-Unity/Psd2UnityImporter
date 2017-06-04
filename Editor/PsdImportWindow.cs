@@ -630,23 +630,21 @@ namespace SubjectNerd.PsdImporter
 		{
 			using (new EditorGUILayout.HorizontalScope())
 			{
-				//using (new EditorGUILayout.VerticalScope())
-				//{
-				//	string strButton = "Reconstruct";
-				//	bool canReconstruct = false;
-				//	if (lastSelectedLayer != null)
-				//	{
-				//		var selLayer = GetLayerData(lastSelectedLayer);
-				//		if (selLayer != null && selLayer.Childs.Count > 0)
-				//		{
-				//			canReconstruct = true;
-				//			strButton = string.Format("Reconstruct {0}", selLayer.name);
-				//		}
-				//	}
+				using (new EditorGUILayout.VerticalScope())
+				{
+					string strButton = "Reconstruct";
+					if (lastSelectedLayer != null)
+					{
+						var selLayer = GetLayerData(lastSelectedLayer);
+						if (selLayer != null && selLayer.Childs.Count > 0)
+						{
+							strButton = string.Format("Reconstruct {0}", selLayer.name);
+						}
+					}
 
-				//	using (new EditorGUI.DisabledGroupScope(canReconstruct == false))
-				//		GUILayout.Button(strButton);
-				//}
+					using (new EditorGUI.DisabledGroupScope(true))
+						GUILayout.Button(strButton);
+				}
 
 				using (new EditorGUILayout.VerticalScope())
 				{
