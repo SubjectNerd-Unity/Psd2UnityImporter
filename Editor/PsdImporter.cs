@@ -474,5 +474,11 @@ namespace SubjectNerd.PsdImporter
 			return text;
 		}
 		#endregion
+
+		#region Reconstruction
+		public static void Reconstruct()
+		{
+		}
+		#endregion
 	}
 }
