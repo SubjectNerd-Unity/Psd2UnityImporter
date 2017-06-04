@@ -16,6 +16,16 @@
 		private static List<EditorCoroutineState> finishedThisUpdate;
 		private static EditorCoroutineState uiCoroutineState;
 
+		[MenuItem("Window/PSD Importer/Force Reset")]
+		public static void KillAllCoroutines()
+		{
+			// force kills all running coroutines if something goes wrong.
+			EditorUtility.ClearProgressBar();
+			uiCoroutineState = null;
+			coroutineStates.Clear();
+			finishedThisUpdate.Clear();
+		}
+
 		/// <summary>
 		/// Start a coroutine. equivilent of calling StartCoroutine on a mono behaviour
 		/// </summary>
@@ -347,7 +357,7 @@
 			{
 				canceled = EditorUtility.DisplayCancelableProgressBar(title, Label, PercentComplete);
 				if (canceled)
-					Debug.Log("CANCLED");
+					Debug.Log("CANCELED");
 			}
 			else
 			{
