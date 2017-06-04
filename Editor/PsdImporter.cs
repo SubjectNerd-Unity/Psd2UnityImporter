@@ -385,10 +385,21 @@ namespace SubjectNerd.PsdImporter
 			TextureImporterSettings texSetting = new TextureImporterSettings();
 			textureImporter.ReadTextureSettings(texSetting);
 
+			float finalPPU = psdUnityImport.spritePixelsPerUnit;
+			switch (layerSettings.ScaleFactor)
+			{
+				case ScaleFactor.Half:
+					finalPPU /= 2;
+					break;
+				case ScaleFactor.Quarter:
+					finalPPU /= 4;
+					break;
+			}
+
 			// Change settings
 			texSetting.spriteAlignment = (int)layerSettings.Alignment;
 			texSetting.spritePivot = layerSettings.Pivot;
-			texSetting.spritePixelsPerUnit = psdUnityImport.spritePixelsPerUnit;
+			texSetting.spritePixelsPerUnit = finalPPU;
 			texSetting.filterMode = psdUnityImport.filterMode;
 			texSetting.wrapMode = psdUnityImport.wrapMode;
 			texSetting.textureType = TextureImporterType.Sprite;
