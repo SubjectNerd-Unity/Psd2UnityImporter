@@ -141,5 +141,7 @@ namespace SubjectNerd.PsdImporter.Reconstructor
 
 			return rectT;
 		}
+
+		public string HelpMessage { get { return "Select an object in a Unity UI hierarchy"; } }
 	}
 }

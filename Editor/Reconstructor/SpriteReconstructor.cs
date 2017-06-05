@@ -112,5 +112,7 @@ namespace SubjectNerd.PsdImporter.Reconstructor
 #endif
 			return rootObject;
 		}
+
+		public string HelpMessage { get { return string.Empty; } }
 	}
 }
