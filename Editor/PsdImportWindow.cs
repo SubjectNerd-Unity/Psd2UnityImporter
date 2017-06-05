@@ -83,8 +83,6 @@ namespace SubjectNerd.PsdImporter
 		private string searchFilter = "";
 
 		private IRecontructor[] reconstructors;
-		private SpriteAlignment reconstructAlignment = SpriteAlignment.BottomCenter;
-		private Vector2 reconstructPivot = new Vector2(0.5f, 0.5f);
 
 		#region UI fields
 		private readonly GUIContent labelHeader = new GUIContent("Import PSD Layers");
@@ -92,10 +90,10 @@ namespace SubjectNerd.PsdImporter
 		private readonly GUIContent labelGrpMode = new GUIContent("Group Mode");
 		private readonly GUIContent labelPackTag = new GUIContent("Packing Tag");
 		private readonly GUIContent labelPixelUnit = new GUIContent("Pixels Per Unit");
-		private readonly GUIContent labelAlignment = new GUIContent("Pivot");
+		private readonly GUIContent labelAlignment = new GUIContent("Default Pivot");
 		private readonly GUIContent labelFile = new GUIContent("Import PSD");
 		private readonly GUIContent labelShowImport = new GUIContent("Import Settings");
-		private readonly GUIContent labelScale = new GUIContent("Scale Factor");
+		private readonly GUIContent labelScale = new GUIContent("Default Scale");
 		private readonly GUIContent labelPath = new GUIContent("Import Folder");
 		private readonly GUIContent labelPickPath = new GUIContent("Open");
 		private readonly GUIContent labelAutoImport = new GUIContent("Auto Import");
@@ -683,24 +681,24 @@ namespace SubjectNerd.PsdImporter
 																	selectedReconstructor,
 																	dropdownReconstruct);
 
-						SpriteAlignUI.DrawGUILayout(GUIContent.none, reconstructAlignment,
+						SpriteAlignUI.DrawGUILayout(GUIContent.none, importSettings.DocAlignment,
 							alignment =>
 							{
-								reconstructAlignment = alignment;
+								importSettings.DocAlignment = alignment;
 								if (alignment != SpriteAlignment.Custom)
-									reconstructPivot = PsdImporter.AlignmentToPivot(alignment);
+									importSettings.DocPivot = PsdImporter.AlignmentToPivot(alignment);
 								Repaint();
 							});
 
-						if (reconstructAlignment == SpriteAlignment.Custom)
-							reconstructPivot = EditorGUILayout.Vector2Field(GUIContent.none, reconstructPivot);
+						if (importSettings.DocAlignment == SpriteAlignment.Custom)
+							importSettings.DocPivot = EditorGUILayout.Vector2Field(GUIContent.none, importSettings.DocPivot);
 
 						if (GUILayout.Button(strButton))
 						{
 							GetLayerData(lastSelectedLayer);
 							IRecontructor useReconstructor = reconstructors[selectedReconstructor];
 							PsdImporter.Reconstruct(importFile, importSettings, reconstructLayer,
-													useReconstructor, reconstructPivot);
+													useReconstructor, importSettings.DocPivot);
 						}
 					}
 				}
