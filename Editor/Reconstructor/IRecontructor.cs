@@ -43,6 +43,6 @@ namespace SubjectNerd.PsdImporter.Reconstructor
 		/// <returns></returns>
 		bool CanReconstruct(GameObject selection);
 
-		void Reconstruct(ImportLayerData root, ReconstructData data, GameObject selection);
+		GameObject Reconstruct(ImportLayerData root, ReconstructData data, GameObject selection);
 	}
 }

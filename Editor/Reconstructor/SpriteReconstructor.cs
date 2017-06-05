@@ -37,7 +37,7 @@ namespace SubjectNerd.PsdImporter.Reconstructor
 			return layerPos;
 		}
 
-		public void Reconstruct(ImportLayerData root, ReconstructData data, GameObject selection)
+		public GameObject Reconstruct(ImportLayerData root, ReconstructData data, GameObject selection)
 		{
 			GameObject rootObject = new GameObject(root.name);
 			if (selection != null)
@@ -110,6 +110,7 @@ namespace SubjectNerd.PsdImporter.Reconstructor
 #if UNITY_5_6_OR_NEWER
 			rootObject.AddComponent<SortingGroup>();
 #endif
+			return rootObject;
 		}
 	}
 }

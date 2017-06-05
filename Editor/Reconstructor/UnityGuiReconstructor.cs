@@ -39,12 +39,12 @@ namespace SubjectNerd.PsdImporter.Reconstructor
 			return layerPos;
 		}
 
-		public void Reconstruct(ImportLayerData root, ReconstructData data, GameObject selection)
+		public GameObject Reconstruct(ImportLayerData root, ReconstructData data, GameObject selection)
 		{
 			if (selection == null)
-				return;
+				return null;
 			if (CanReconstruct(selection) == false)
-				return;
+				return null;
 
 			var rootT = CreateObject(root.name);
 			rootT.SetParent(selection.transform);
@@ -128,6 +128,8 @@ namespace SubjectNerd.PsdImporter.Reconstructor
 					// Go back to the last parent
 					hierarchy.Pop();
 				});
+
+			return rootT.gameObject;
 		}
 
 		private RectTransform CreateObject(string name)
