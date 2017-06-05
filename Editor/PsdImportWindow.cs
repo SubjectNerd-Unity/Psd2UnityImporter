@@ -97,7 +97,7 @@ namespace SubjectNerd.PsdImporter
 		private readonly GUIContent labelScale = new GUIContent("Default Scale");
 		private readonly GUIContent labelPath = new GUIContent("Import Folder");
 		private readonly GUIContent labelPickPath = new GUIContent("Open");
-		private readonly GUIContent labelAutoImport = new GUIContent("Auto Import");
+		//private readonly GUIContent labelAutoImport = new GUIContent("Auto Import");
 		private readonly GUIContent labelUseConstructor = new GUIContent("Reconstructor");
 		private readonly GUIContent labelSelConstructor = new GUIContent("Construct As");
 		private readonly GUIContent labelDocAlign = new GUIContent("Document Alignment");
@@ -698,7 +698,16 @@ namespace SubjectNerd.PsdImporter
 
 		private void DrawReconstructor()
 		{
-			showConstructor = EditorGUILayout.Foldout(showConstructor, labelUseConstructor, styleBoldFoldout);
+			using (var check = new EditorGUI.ChangeCheckScope())
+			{
+				showConstructor = EditorGUILayout.Foldout(showConstructor, labelUseConstructor, styleBoldFoldout);
+				if (check.changed)
+				{
+					Rect window = position;
+					window.yMax += 120 * (showConstructor ? 1 : -1);
+					position = window;
+				}
+			}
 			if (showConstructor == false)
 				return;
 
@@ -773,13 +782,25 @@ namespace SubjectNerd.PsdImporter
 
 		private void DrawImportSettings()
 		{
-			showImportSettings = EditorGUILayout.Foldout(showImportSettings, labelShowImport, styleBoldFoldout);
+			using (var check = new EditorGUI.ChangeCheckScope())
+			{
+				showImportSettings = EditorGUILayout.Foldout(showImportSettings, labelShowImport, styleBoldFoldout);
+				if (check.changed)
+				{
+					Rect window = position;
+					int expand = 165;
+					window.yMax += showImportSettings ? expand : -expand;
+					position = window;
+				}
+			}
+
 			if (showImportSettings == false)
 				return;
-
-			EditorGUILayout.Space();
+			
 			EditorGUI.indentLevel++;
 			EditorGUI.BeginDisabledGroup(importFile == null);
+
+			EditorGUILayout.Space();
 
 			EditorGUI.BeginChangeCheck();
 			
@@ -816,7 +837,7 @@ namespace SubjectNerd.PsdImporter
 			}
 
 			importSettings.ScaleFactor = (ScaleFactor)EditorGUILayout.EnumPopup(labelScale, importSettings.ScaleFactor);
-			importSettings.AutoImport = EditorGUILayout.Toggle(labelAutoImport, importSettings.AutoImport);
+			//importSettings.AutoImport = EditorGUILayout.Toggle(labelAutoImport, importSettings.AutoImport);
 
 			if (EditorGUI.EndChangeCheck())
 			{
