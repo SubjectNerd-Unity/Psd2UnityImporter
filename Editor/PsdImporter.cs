@@ -4,6 +4,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using SubjectNerd.PsdImporter.PsdParser;
+using SubjectNerd.PsdImporter.Reconstructor;
 using UnityEditor;
 using UnityEngine;
 using Object = UnityEngine.Object;
@@ -481,8 +482,119 @@ namespace SubjectNerd.PsdImporter
 		#endregion
 
 		#region Reconstruction
-		public static void Reconstruct()
+
+		private static ReconstructData GetReconstructData(PsdDocument psdDoc, string psdPath, Vector2 documentPivot,
+													ImportUserData importSettings, ImportLayerData reconstructRoot)
 		{
+			// Get the texture import setting of the PSD
+			TextureImporter psdUnitySettings = (TextureImporter)AssetImporter.GetAtPath(psdPath);
+			TextureImporterSettings psdUnityImport = new TextureImporterSettings();
+			psdUnitySettings.ReadTextureSettings(psdUnityImport);
+
+			Vector2 docSize = new Vector2(psdDoc.Width, psdDoc.Height);
+			ReconstructData data = new ReconstructData(docSize, documentPivot, psdUnitySettings.spritePixelsPerUnit);
+
+			reconstructRoot.Iterate(
+				layerCallback: layer =>
+				{
+					if (layer.import == false)
+						return;
+
+					var psdLayer = GetPsdLayerByIndex(psdDoc, layer.indexId);
+
+					Rect layerBounds = new Rect()
+					{
+						xMin = psdLayer.Left,
+						xMax = psdLayer.Right,
+						yMin = psdDoc.Height - psdLayer.Bottom,
+						yMax = psdDoc.Height - psdLayer.Top
+					};
+					data.layerBoundsIndex.Add(layer.indexId, layerBounds);
+
+					string layerDir;
+					string layerPath = GetFilePath(psdLayer, importSettings, out layerDir);
+					Sprite layerSprite = AssetDatabase.LoadAssetAtPath<Sprite>(layerPath);
+
+					if (layerSprite == null)
+						layerSprite = ImportLayer(psdDoc, importSettings, layer, psdUnityImport);
+
+					Vector2 spriteAnchor = Vector2.zero;
+
+					if (layerSprite != null)
+					{
+						TextureImporter layerImporter = (TextureImporter)AssetImporter.GetAtPath(layerPath);
+						TextureImporterSettings layerSettings = new TextureImporterSettings();
+						layerImporter.ReadTextureSettings(layerSettings);
+						
+						if (layerSettings.spriteAlignment == (int) SpriteAlignment.Custom)
+							spriteAnchor = layerSettings.spritePivot;
+						else
+							spriteAnchor = AlignmentToPivot((SpriteAlignment) layerSettings.spriteAlignment);
+					}
+					data.AddSprite(layer.indexId, layerSprite, spriteAnchor);
+				},
+				canEnterGroup: checkGroup => checkGroup.import
+			);
+
+			return data;
+		}
+		public static void Reconstruct(Object psdFile, ImportUserData importSettings, ImportLayerData reconstructRoot,
+										IRecontructor reconstructor, Vector2 documentPivot)
+		{
+			string psdPath = GetPsdFilepath(psdFile);
+			if (string.IsNullOrEmpty(psdPath))
+				return;
+			
+			using (var psdDoc = PsdDocument.Create(psdPath))
+			{
+				ReconstructData data = GetReconstructData(psdDoc, psdPath,
+												documentPivot, importSettings,
+												reconstructRoot);
+				
+				reconstructor.Reconstruct(reconstructRoot, data, Selection.activeGameObject);
+			}
+		}
+
+		public static Vector2 AlignmentToPivot(SpriteAlignment spriteAlignment)
+		{
+			Vector2 pivot = Vector2.zero;
+			switch (spriteAlignment)
+			{
+				case SpriteAlignment.TopLeft:
+				case SpriteAlignment.TopCenter:
+				case SpriteAlignment.TopRight:
+					pivot.y = 1f;
+					break;
+				case SpriteAlignment.LeftCenter:
+				case SpriteAlignment.Center:
+				case SpriteAlignment.RightCenter:
+					pivot.y = 0.5f;
+					break;
+				case SpriteAlignment.BottomLeft:
+				case SpriteAlignment.BottomCenter:
+				case SpriteAlignment.BottomRight:
+					pivot.y = 0f;
+					break;
+			}
+			switch (spriteAlignment)
+			{
+				case SpriteAlignment.TopLeft:
+				case SpriteAlignment.LeftCenter:
+				case SpriteAlignment.BottomLeft:
+					pivot.x = 0f;
+					break;
+				case SpriteAlignment.TopCenter:
+				case SpriteAlignment.Center:
+				case SpriteAlignment.BottomCenter:
+					pivot.x = 0.5f;
+					break;
+				case SpriteAlignment.TopRight:
+				case SpriteAlignment.RightCenter:
+				case SpriteAlignment.BottomRight:
+					pivot.x = 1f;
+					break;
+			}
+			return pivot;
 		}
 		#endregion
 	}
