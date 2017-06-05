@@ -29,7 +29,7 @@ namespace SubjectNerd.PsdImporter.Reconstructor
 		}
 	}
 
-	public interface IRecontructor
+	public interface IReconstructor
 	{
 		/// <summary>
 		/// Name to display in UI

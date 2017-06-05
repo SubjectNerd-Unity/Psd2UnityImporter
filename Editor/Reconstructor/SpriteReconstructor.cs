@@ -8,7 +8,7 @@ namespace SubjectNerd.PsdImporter.Reconstructor
 	/// <summary>
 	/// Reconstructs a PSD document as a hierarchy of SpriteRenderers
 	/// </summary>
-	public class SpriteReconstructor : IRecontructor
+	public class SpriteReconstructor : IReconstructor
 	{
 		private const string DISPLAY_NAME = "Unity Sprites";
 

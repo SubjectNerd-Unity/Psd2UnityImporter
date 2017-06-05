@@ -4,7 +4,7 @@ using UnityEngine.UI;
 
 namespace SubjectNerd.PsdImporter.Reconstructor
 {
-	public class UnityGuiReconstructor : IRecontructor
+	public class UnityGuiReconstructor : IReconstructor
 	{
 		private const string DISPLAY_NAME = "Unity UI";
 		public string DisplayName { get {return DISPLAY_NAME;} }

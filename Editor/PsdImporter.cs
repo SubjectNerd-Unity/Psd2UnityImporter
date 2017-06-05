@@ -538,8 +538,10 @@ namespace SubjectNerd.PsdImporter
 
 			return data;
 		}
-		public static void Reconstruct(Object psdFile, ImportUserData importSettings, ImportLayerData reconstructRoot,
-										IRecontructor reconstructor, Vector2 documentPivot)
+
+		public static void Reconstruct(Object psdFile, ImportUserData importSettings,
+										ImportLayerData reconstructRoot, Vector2 documentPivot,
+										IReconstructor reconstructor)
 		{
 			string psdPath = GetPsdFilepath(psdFile);
 			if (string.IsNullOrEmpty(psdPath))

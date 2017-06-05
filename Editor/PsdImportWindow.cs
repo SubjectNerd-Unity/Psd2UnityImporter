@@ -82,7 +82,7 @@ namespace SubjectNerd.PsdImporter
 		private bool selectionChangeState;
 		private string searchFilter = "";
 
-		private IRecontructor[] reconstructors;
+		private IReconstructor[] reconstructors;
 
 		#region UI fields
 		private readonly GUIContent labelHeader = new GUIContent("Import PSD Layers");
@@ -187,18 +187,18 @@ namespace SubjectNerd.PsdImporter
 			serializer = new fsSerializer();
 
 			// Find implementations of IReconstructor
-			var type = typeof(IRecontructor);
+			var type = typeof(IReconstructor);
 			var types = AppDomain.CurrentDomain.GetAssemblies()
 								.SelectMany(s => s.GetTypes())
 								.Where(p => p != type && type.IsAssignableFrom(p));
 
-			List<IRecontructor> constructor_list = new List<IRecontructor>();
+			List<IReconstructor> constructor_list = new List<IReconstructor>();
 			List<GUIContent> constructor_dropdown = new List<GUIContent>();
 
 			foreach (Type type_constructor in types)
 			{
 				var instance = Activator.CreateInstance(type_constructor);
-				var r_instance = (IRecontructor)instance;
+				var r_instance = (IReconstructor)instance;
 				if (r_instance != null)
 				{
 					constructor_list.Add(r_instance);
