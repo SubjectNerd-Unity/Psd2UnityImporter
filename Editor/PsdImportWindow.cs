@@ -75,7 +75,7 @@ namespace SubjectNerd.PsdImporter
 
 		fsSerializer serializer;
 		private Type typeTex2D, typeImportUserData;
-		private bool showImportSettings;
+		private bool showImportSettings, showConstructor;
 		private int[] lastSelectedLayer;
 
 		private readonly Dictionary<int[], Rect> layerRectLookup = new Dictionary<int[], Rect>();
@@ -99,6 +99,9 @@ namespace SubjectNerd.PsdImporter
 		private readonly GUIContent labelPickPath = new GUIContent("Open");
 		private readonly GUIContent labelAutoImport = new GUIContent("Auto Import");
 		private readonly GUIContent labelUseConstructor = new GUIContent("Reconstructor");
+		private readonly GUIContent labelSelConstructor = new GUIContent("Construct As");
+		private readonly GUIContent labelDocAlign = new GUIContent("Document Alignment");
+		private readonly GUIContent labelDocPivot = new GUIContent("Document Pivot");
 
 		private int selectedReconstructor;
 		private GUIContent[] dropdownReconstruct;
@@ -111,6 +114,7 @@ namespace SubjectNerd.PsdImporter
 		private Texture2D icnFolder, icnTexture;
 		private GUILayoutOption layerHeight;
 		private GUILayoutOption noExpandW;
+		private GUILayoutOption bigButton;
 
 		// Column widths
 		private Rect rImportToggle, rVisible, rLayerDisplay, rPivot, rScaling, rMakeDefault;
@@ -129,6 +133,7 @@ namespace SubjectNerd.PsdImporter
 
 			layerHeight = GUILayout.Height(EditorGUIUtility.singleLineHeight + 5);
 			noExpandW = GUILayout.ExpandWidth(false);
+			bigButton = GUILayout.Height(30);
 			icnFolder = EditorGUIUtility.FindTexture("Folder Icon");
 			icnTexture = EditorGUIUtility.FindTexture("Texture Icon");
 
@@ -139,7 +144,7 @@ namespace SubjectNerd.PsdImporter
 			};
 
 			var tempStyle = GUI.skin.FindStyle("EyeDropperHorizontalLine");
-
+			
 			styleLayerEntry = new GUIStyle(GUI.skin.box)
 			{
 				margin = new RectOffset(0, 0, 0, 0),
@@ -351,6 +356,8 @@ namespace SubjectNerd.PsdImporter
 			DrawPsdOperations();
 
 			DrawImportSettings();
+			
+			DrawReconstructor();
 
 			EditorGUILayout.Space();
 		}
@@ -359,10 +366,12 @@ namespace SubjectNerd.PsdImporter
 		{
 			// Calculate the sizes for the columns
 			var width = EditorGUIUtility.currentViewWidth;
-			var height = EditorGUIUtility.singleLineHeight + 4;
-			rImportToggle = new Rect(10, 2, 16, height);
-			rVisible = new Rect(rImportToggle.xMax + 3, 3, 10, height);
-			rMakeDefault = new Rect(0, 2, 20, EditorGUIUtility.singleLineHeight);
+			var height = EditorGUIUtility.singleLineHeight + 10;
+			int padTop = 4;
+			int padBetween = 3;
+			rImportToggle = new Rect(10, padTop, 16, height);
+			rVisible = new Rect(rImportToggle.xMax + padBetween, padTop + 2, 10, height);
+			rMakeDefault = new Rect(0, padTop, 20, EditorGUIUtility.singleLineHeight);
 
 			var distWidth = width - rMakeDefault.width - rVisible.xMax;
 			distWidth -= tableWillScroll ? 40 : 25;
@@ -370,10 +379,10 @@ namespace SubjectNerd.PsdImporter
 			var pivotWidth = Mathf.Clamp(distWidth * 0.2f, 95, 120);
 			var scaleWidth = Mathf.Clamp(distWidth * 0.2f, 65, 120);
 			var layerWidth = Mathf.Max(distWidth - pivotWidth - scaleWidth, 150);
-			rLayerDisplay = new Rect(rVisible.xMax + 10, 0, layerWidth, height);
-			rPivot = new Rect(rLayerDisplay.xMax + 3, 2, pivotWidth, height);
-			rScaling = new Rect(rPivot.xMax + 3, 2, scaleWidth, height);
-			rMakeDefault.x = rScaling.xMax + 3;
+			rLayerDisplay = new Rect(rVisible.xMax + 10, 2, layerWidth, height - 4);
+			rPivot = new Rect(rLayerDisplay.xMax + padBetween, padTop, pivotWidth, height);
+			rScaling = new Rect(rPivot.xMax + padBetween, padTop, scaleWidth, height);
+			rMakeDefault.x = rScaling.xMax + padBetween;
 
 			rTableSize = new Vector2(rMakeDefault.xMax, height);
 			return width;
@@ -444,7 +453,6 @@ namespace SubjectNerd.PsdImporter
 
 				using (new EditorGUILayout.HorizontalScope())
 				{
-					var bigButton = GUILayout.Height(30);
 					string textImport = string.Format("Import Saved ({0})", importLayersList.Count);
 					string textQuickImport = string.Format("Import Selected ({0})", selectionCount);
 
@@ -543,6 +551,7 @@ namespace SubjectNerd.PsdImporter
 								lastSelectedLayer = null;
 							Repaint();
 						}
+						evt.Use();
 					}
 
 					if (evt.type == EventType.MouseUp)
@@ -668,83 +677,98 @@ namespace SubjectNerd.PsdImporter
 
 		private void DrawPsdOperations()
 		{
-			using (new EditorGUILayout.HorizontalScope())
-			{
-				using (new EditorGUILayout.VerticalScope())
-				{
-					string strButton = "Reconstruct";
-					ImportLayerData reconstructLayer = null;
-					if (lastSelectedLayer != null)
-					{
-						reconstructLayer = GetLayerData(lastSelectedLayer);
-						if (reconstructLayer != null && reconstructLayer.Childs.Count > 0)
-						{
-							strButton = string.Format("Reconstruct {0}", reconstructLayer.name);
-						}
-					}
+			//using (new EditorGUILayout.HorizontalScope())
+			//{
+			//	using (new EditorGUILayout.VerticalScope())
+			//	{
 					
-					EditorGUILayout.PrefixLabel(labelUseConstructor);
+			//	}
 
-					selectedReconstructor = EditorGUILayout.Popup(GUIContent.none,
-																selectedReconstructor,
-																dropdownReconstruct);
-
-					SpriteAlignUI.DrawGUILayout(GUIContent.none, importSettings.DocAlignment,
-						alignment =>
-						{
-							importSettings.DocAlignment = alignment;
-							if (alignment != SpriteAlignment.Custom)
-								importSettings.DocPivot = PsdImporter.AlignmentToPivot(alignment);
-							Repaint();
-						});
-
-					if (importSettings.DocAlignment == SpriteAlignment.Custom)
-						importSettings.DocPivot = EditorGUILayout.Vector2Field(GUIContent.none, importSettings.DocPivot);
-
-					bool canReconstruct = reconstructLayer != null;
-					IReconstructor reconstructorInstance = null;
-					if (canReconstruct)
-					{
-						if (selectedReconstructor > -1 && selectedReconstructor < reconstructors.Length)
-						{
-							reconstructorInstance = reconstructors[selectedReconstructor];
-                            canReconstruct = reconstructorInstance.CanReconstruct(Selection.activeGameObject);
-						}
-						else
-						{
-							canReconstruct = false;
-						}
-					}
-
-					using (new EditorGUI.DisabledGroupScope(canReconstruct == false))
-					{
-						if (GUILayout.Button(strButton))
-						{
-							GetLayerData(lastSelectedLayer);
-							PsdImporter.Reconstruct(importFile, importSettings, reconstructLayer,
-													importSettings.DocPivot, reconstructorInstance);
-						}
-					}
-
-					if (canReconstruct == false)
-					{
-						string helpMessage = "Select a layer group";
-						if (reconstructLayer != null && reconstructorInstance != null)
-							helpMessage = reconstructorInstance.HelpMessage;
-						EditorGUILayout.HelpBox(helpMessage, MessageType.Info);
-					}
-				}
-
-				using (new EditorGUILayout.VerticalScope())
-				{
+			//	using (new EditorGUILayout.VerticalScope())
+			//	{
 					GUIContent fileLabel = importFile == null ? labelFile : new GUIContent(importFile.name);
 
 					EditorGUI.BeginChangeCheck();
 					importFile = EditorGUILayout.ObjectField(fileLabel, importFile, typeTex2D, false);
 					if (EditorGUI.EndChangeCheck())
 						OpenFile(importFile);
+			//	}
+			//}
+		}
+
+		private void DrawReconstructor()
+		{
+			showConstructor = EditorGUILayout.Foldout(showConstructor, labelUseConstructor, styleBoldFoldout);
+			if (showConstructor == false)
+				return;
+
+			EditorGUILayout.Space();
+			EditorGUI.indentLevel++;
+			
+			ImportLayerData reconstructLayer = null;
+			if (lastSelectedLayer != null)
+			{
+				reconstructLayer = GetLayerData(lastSelectedLayer);
+				if (reconstructLayer != null && reconstructLayer.Childs.Count == 0)
+				{
+					reconstructLayer = null;
 				}
 			}
+
+			selectedReconstructor = EditorGUILayout.Popup(labelSelConstructor,
+														selectedReconstructor,
+														dropdownReconstruct);
+
+			SpriteAlignUI.DrawGUILayout(labelDocAlign, importSettings.DocAlignment,
+				alignment =>
+				{
+					importSettings.DocAlignment = alignment;
+					if (alignment != SpriteAlignment.Custom)
+						importSettings.DocPivot = PsdImporter.AlignmentToPivot(alignment);
+					Repaint();
+				});
+
+			if (importSettings.DocAlignment == SpriteAlignment.Custom)
+			{
+				EditorGUI.indentLevel++;
+				importSettings.DocPivot = EditorGUILayout.Vector2Field(labelDocPivot, importSettings.DocPivot);
+				EditorGUI.indentLevel--;
+			}
+
+			bool canReconstruct = reconstructLayer != null;
+			IReconstructor reconstructorInstance = null;
+			if (canReconstruct)
+			{
+				if (selectedReconstructor > -1 && selectedReconstructor < reconstructors.Length)
+				{
+					reconstructorInstance = reconstructors[selectedReconstructor];
+					canReconstruct = reconstructorInstance.CanReconstruct(Selection.activeGameObject);
+				}
+				else
+				{
+					canReconstruct = false;
+				}
+			}
+			
+			if (canReconstruct)
+			{
+				string strButton = string.Format("Build {0} as {1}", reconstructLayer.name, reconstructorInstance.DisplayName);
+				if (GUILayout.Button(strButton, bigButton))
+				{
+					GetLayerData(lastSelectedLayer);
+					PsdImporter.Reconstruct(importFile, importSettings, reconstructLayer,
+											importSettings.DocPivot, reconstructorInstance);
+				}
+			}
+			else
+			{
+				string helpMessage = "Select a layer group";
+				if (reconstructLayer != null && reconstructorInstance != null)
+					helpMessage = reconstructorInstance.HelpMessage;
+				EditorGUILayout.HelpBox(helpMessage, MessageType.Info);
+			}
+
+			EditorGUI.indentLevel--;
 		}
 
 		private void DrawImportSettings()
@@ -753,6 +777,7 @@ namespace SubjectNerd.PsdImporter
 			if (showImportSettings == false)
 				return;
 
+			EditorGUILayout.Space();
 			EditorGUI.indentLevel++;
 			EditorGUI.BeginDisabledGroup(importFile == null);
 
