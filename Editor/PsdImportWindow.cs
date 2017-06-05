@@ -1,6 +1,8 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Linq;
 using SubjectNerd.PsdImporter.FullSerializer;
+using SubjectNerd.PsdImporter.Reconstructor;
 using UnityEditor;
 using UnityEngine;
 using Object = UnityEngine.Object;
@@ -80,6 +82,10 @@ namespace SubjectNerd.PsdImporter
 		private bool selectionChangeState;
 		private string searchFilter = "";
 
+		private IRecontructor[] reconstructors;
+		private SpriteAlignment reconstructAlignment = SpriteAlignment.BottomCenter;
+		private Vector2 reconstructPivot = new Vector2(0.5f, 0.5f);
+
 		#region UI fields
 		private readonly GUIContent labelHeader = new GUIContent("Import PSD Layers");
 		private readonly GUIContent labelFileNaming = new GUIContent("File Names");
@@ -93,6 +99,10 @@ namespace SubjectNerd.PsdImporter
 		private readonly GUIContent labelPath = new GUIContent("Import Folder");
 		private readonly GUIContent labelPickPath = new GUIContent("Open");
 		private readonly GUIContent labelAutoImport = new GUIContent("Auto Import");
+		private readonly GUIContent labelUseConstructor = new GUIContent("Reconstructor");
+
+		private int selectedReconstructor;
+		private GUIContent[] dropdownReconstruct;
 
 		private bool stylesLoaded = false;
 		private GUIStyle styleHeader, styleBoldFoldout,
@@ -177,6 +187,35 @@ namespace SubjectNerd.PsdImporter
 			typeTex2D = typeof(Texture2D);
 			typeImportUserData = typeof(ImportUserData);
 			serializer = new fsSerializer();
+
+			// Find implementations of IReconstructor
+			var type = typeof(IRecontructor);
+			var types = AppDomain.CurrentDomain.GetAssemblies()
+								.SelectMany(s => s.GetTypes())
+								.Where(p => p != type && type.IsAssignableFrom(p));
+
+			List<IRecontructor> constructor_list = new List<IRecontructor>();
+			List<GUIContent> constructor_dropdown = new List<GUIContent>();
+
+			foreach (Type type_constructor in types)
+			{
+				var instance = Activator.CreateInstance(type_constructor);
+				var r_instance = (IRecontructor)instance;
+				if (r_instance != null)
+				{
+					constructor_list.Add(r_instance);
+					constructor_dropdown.Add(new GUIContent(r_instance.DisplayName));
+				}
+			}
+
+			reconstructors = constructor_list.ToArray();
+			dropdownReconstruct = constructor_dropdown.ToArray();
+		}
+
+		private void OnDestroy()
+		{
+			reconstructors = null;
+			dropdownReconstruct = null;
 		}
 
 		public void OpenFile(Object fileObject)
@@ -613,11 +652,6 @@ namespace SubjectNerd.PsdImporter
 						}
 					}
 				}
-				
-				if (settingsChanged && quickSelect.Contains(layer.indexId))
-				{
-					QuickSelectApplySettings(layer.Alignment, layer.Pivot, layer.ScaleFactor, layer.useDefaults);
-				}
 			}
 
 			Rect layerRect = GUILayoutUtility.GetLastRect();
@@ -633,17 +667,44 @@ namespace SubjectNerd.PsdImporter
 				using (new EditorGUILayout.VerticalScope())
 				{
 					string strButton = "Reconstruct";
+					ImportLayerData reconstructLayer = null;
 					if (lastSelectedLayer != null)
 					{
-						var selLayer = GetLayerData(lastSelectedLayer);
-						if (selLayer != null && selLayer.Childs.Count > 0)
+						reconstructLayer = GetLayerData(lastSelectedLayer);
+						if (reconstructLayer != null && reconstructLayer.Childs.Count > 0)
 						{
-							strButton = string.Format("Reconstruct {0}", selLayer.name);
+							strButton = string.Format("Reconstruct {0}", reconstructLayer.name);
 						}
 					}
 
-					using (new EditorGUI.DisabledGroupScope(true))
-						GUILayout.Button(strButton);
+					using (new EditorGUI.DisabledGroupScope(reconstructLayer == null))
+					{
+						EditorGUILayout.PrefixLabel(labelUseConstructor);
+
+						selectedReconstructor = EditorGUILayout.Popup(GUIContent.none, 
+																	selectedReconstructor,
+																	dropdownReconstruct);
+
+						SpriteAlignUI.DrawGUILayout(GUIContent.none, reconstructAlignment,
+							alignment =>
+							{
+								reconstructAlignment = alignment;
+								if (alignment != SpriteAlignment.Custom)
+									reconstructPivot = PsdImporter.AlignmentToPivot(alignment);
+								Repaint();
+							});
+
+						if (reconstructAlignment == SpriteAlignment.Custom)
+							reconstructPivot = EditorGUILayout.Vector2Field(GUIContent.none, reconstructPivot);
+
+						if (GUILayout.Button(strButton))
+						{
+							GetLayerData(lastSelectedLayer);
+							IRecontructor useReconstructor = reconstructors[selectedReconstructor];
+							PsdImporter.Reconstruct(importFile, importSettings, reconstructLayer,
+													useReconstructor, reconstructPivot);
+						}
+					}
 				}
 
 				using (new EditorGUILayout.VerticalScope())
