@@ -551,7 +551,12 @@ namespace SubjectNerd.PsdImporter
 												documentPivot, importSettings,
 												reconstructRoot);
 				
-				reconstructor.Reconstruct(reconstructRoot, data, Selection.activeGameObject);
+				var GO = reconstructor.Reconstruct(reconstructRoot, data, Selection.activeGameObject);
+				if (GO != null)
+				{
+					EditorGUIUtility.PingObject(GO);
+					Selection.activeGameObject = GO;
+				}
 			}
 		}
 
