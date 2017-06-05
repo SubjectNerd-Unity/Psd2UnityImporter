@@ -614,9 +614,7 @@ namespace SubjectNerd.PsdImporter
 					image = isGroup ? icnFolder : icnTexture,
 					text = layer.name
 				};
-
-				bool settingsChanged = false;
-
+				
 				if (isGroup)
 				{
 					float min, max;
