@@ -67,6 +67,7 @@ namespace SubjectNerd.PsdImporter
 		private string importPath;
 		private ImportUserData importSettings;
 		private DisplayLayerData importDisplay;
+		private Texture2D importPreview;
 		private bool settingsChanged;
 
 		private readonly List<int[]> importLayersList = new List<int[]>();
@@ -74,8 +75,8 @@ namespace SubjectNerd.PsdImporter
 		private int selectionCount = 0;
 
 		fsSerializer serializer;
-		private Type typeTex2D, typeImportUserData;
-		private bool showImportSettings, showConstructor;
+		private Type typeImportUserData;
+		private bool showImportSettings;
 		private int[] lastSelectedLayer;
 
 		private readonly Dictionary<int[], Rect> layerRectLookup = new Dictionary<int[], Rect>();
@@ -109,7 +110,7 @@ namespace SubjectNerd.PsdImporter
 		private bool stylesLoaded = false;
 		private GUIStyle styleHeader, styleBoldFoldout,
 						styleLayerEntry, styleLayerSelected,
-						styleVisOn, styleVisOff,
+						styleVisOn, styleVisOff, styleLoader,
 						styleToolbar, styleToolSearch, styleToolCancel;
 		private Texture2D icnFolder, icnTexture;
 		private GUILayoutOption layerHeight;
@@ -153,11 +154,23 @@ namespace SubjectNerd.PsdImporter
 				normal = new GUIStyleState() { background = tempStyle.normal.background }
 			};
 
+			tempStyle = GUI.skin.FindStyle("HelpBox");
+
 			styleLayerSelected = new GUIStyle(GUI.skin.box)
 			{
 				margin = new RectOffset(0, 0, 0, 0),
 				padding = new RectOffset(0, 0, 0, 0),
-				contentOffset = new Vector2(0, 0)
+				contentOffset = new Vector2(0, 0),
+                normal = new GUIStyleState() { background = tempStyle.normal.background }
+			};
+
+			styleLoader = new GUIStyle(GUI.skin.FindStyle("ObjectFieldThumb"))
+			{
+				margin = new RectOffset(5, 5, 5, 5),
+				padding = new RectOffset(2, 2, 2, 2),
+				alignment = TextAnchor.MiddleCenter,
+				fixedHeight = 100,
+				stretchWidth = true
 			};
 
 			styleBoldFoldout = new GUIStyle(EditorStyles.foldout)
@@ -191,7 +204,6 @@ namespace SubjectNerd.PsdImporter
 			Selection.selectionChanged += HandleSelectionChange;
 
 			stylesLoaded = false;
-			typeTex2D = typeof(Texture2D);
 			typeImportUserData = typeof(ImportUserData);
 			serializer = new fsSerializer();
 
@@ -217,6 +229,7 @@ namespace SubjectNerd.PsdImporter
 
 			reconstructors = constructor_list.ToArray();
 			dropdownReconstruct = constructor_dropdown.ToArray();
+			importSettings = new ImportUserData();
 		}
 
 		private void OnDestroy()
@@ -238,9 +251,10 @@ namespace SubjectNerd.PsdImporter
 
 			importFile = null;
 			importPath = string.Empty;
+			importPreview = null;
 			importPPU = 100;
 
-			importSettings = new ImportUserData();
+			importSettings = new ImportUserData() {DocAlignment = SpriteAlignment.Center};
 			importDisplay = null;
 
 			selectionCount = 0;
@@ -255,6 +269,7 @@ namespace SubjectNerd.PsdImporter
 
 			importFile = fileObject;
 			importPath = filePath;
+			importPreview = AssetDatabase.LoadAssetAtPath<Texture2D>(importPath);
 
 			// Read the texture import settings of the asset file
 			TextureImporter textureImporter = (TextureImporter)AssetImporter.GetAtPath(importPath);
@@ -350,15 +365,41 @@ namespace SubjectNerd.PsdImporter
 		private void OnGUI()
 		{
 			LoadStyles();
+			
+			switch (Event.current.commandName)
+			{
+				case "ObjectSelectorUpdated":
+				case "ObjectSelectorClosed":
+					OpenFile(EditorGUIUtility.GetObjectPickerObject());
+					Repaint();
+					break;
+			}
 
 			DrawLayerTable();
 
-			DrawPsdOperations();
+			using (new EditorGUILayout.HorizontalScope())
+			{
+				EditorGUILayout.Space();
+
+				using (new EditorGUILayout.VerticalScope())
+				{
+					DrawReconstructor();
+				}
+
+				EditorGUILayout.Space();
+
+				using (new EditorGUILayout.VerticalScope(noExpandW))
+				{
+					DrawPsdOperations();
+				}
+
+				EditorGUILayout.Space();
+			}
+
+			EditorGUILayout.Space();
 
 			DrawImportSettings();
 			
-			DrawReconstructor();
-
 			EditorGUILayout.Space();
 		}
 
@@ -677,42 +718,35 @@ namespace SubjectNerd.PsdImporter
 
 		private void DrawPsdOperations()
 		{
-			//using (new EditorGUILayout.HorizontalScope())
-			//{
-			//	using (new EditorGUILayout.VerticalScope())
-			//	{
-					
-			//	}
+			GUIContent fileLabel = importFile == null ? labelFile : new GUIContent(importFile.name);
+			
+			GUILayout.Label(fileLabel, EditorStyles.boldLabel, noExpandW);
+			GUILayout.Label(importPreview, styleLoader, GUILayout.MaxHeight(100f), noExpandW, GUILayout.MinWidth(100));
+			Rect rLabel = GUILayoutUtility.GetLastRect();
 
-			//	using (new EditorGUILayout.VerticalScope())
-			//	{
-					GUIContent fileLabel = importFile == null ? labelFile : new GUIContent(importFile.name);
-
-					EditorGUI.BeginChangeCheck();
-					importFile = EditorGUILayout.ObjectField(fileLabel, importFile, typeTex2D, false);
-					if (EditorGUI.EndChangeCheck())
-						OpenFile(importFile);
-			//	}
-			//}
+			Rect rPing = new Rect(rLabel) {yMax = rLabel.yMax - 15};
+			Rect rSelect = new Rect(rLabel)
+			{
+				yMin = rLabel.yMax - 15,
+				xMin = rLabel.xMax - 50
+			};
+			if (GUI.Button(rPing, GUIContent.none, new GUIStyle()))
+			{
+				EditorGUIUtility.PingObject(importFile);
+			}
+			if (GUI.Button(rSelect, "Select", EditorStyles.miniButton))
+			{
+				int controlID = GUIUtility.GetControlID(FocusType.Passive);
+				EditorGUIUtility.ShowObjectPicker<Texture2D>(importFile, false, string.Empty, controlID);
+			}
 		}
 
 		private void DrawReconstructor()
 		{
-			using (var check = new EditorGUI.ChangeCheckScope())
-			{
-				showConstructor = EditorGUILayout.Foldout(showConstructor, labelUseConstructor, styleBoldFoldout);
-				if (check.changed)
-				{
-					Rect window = position;
-					window.yMax += 120 * (showConstructor ? 1 : -1);
-					position = window;
-				}
-			}
-			if (showConstructor == false)
+			if (importSettings == null)
 				return;
 
-			EditorGUILayout.Space();
-			EditorGUI.indentLevel++;
+			EditorGUILayout.LabelField(labelUseConstructor, EditorStyles.boldLabel);
 			
 			ImportLayerData reconstructLayer = null;
 			if (lastSelectedLayer != null)
@@ -727,7 +761,7 @@ namespace SubjectNerd.PsdImporter
 			selectedReconstructor = EditorGUILayout.Popup(labelSelConstructor,
 														selectedReconstructor,
 														dropdownReconstruct);
-
+			
 			SpriteAlignUI.DrawGUILayout(labelDocAlign, importSettings.DocAlignment,
 				alignment =>
 				{
@@ -776,8 +810,6 @@ namespace SubjectNerd.PsdImporter
 					helpMessage = reconstructorInstance.HelpMessage;
 				EditorGUILayout.HelpBox(helpMessage, MessageType.Info);
 			}
-
-			EditorGUI.indentLevel--;
 		}
 
 		private void DrawImportSettings()
