@@ -19,6 +19,7 @@ namespace SubjectNerd.PsdImporter
 			var win = GetWindow<PsdImportWindow>();
 			win.titleContent = new GUIContent("PSD Importer");
 			win.Show(true);
+			win.autoRepaintOnSceneChange = true;
 			return win;
 		}
 
@@ -181,6 +182,9 @@ namespace SubjectNerd.PsdImporter
 
 		private void OnEnable()
 		{
+			Selection.selectionChanged -= HandleSelectionChange;
+			Selection.selectionChanged += HandleSelectionChange;
+
 			stylesLoaded = false;
 			typeTex2D = typeof(Texture2D);
 			typeImportUserData = typeof(ImportUserData);
@@ -212,8 +216,14 @@ namespace SubjectNerd.PsdImporter
 
 		private void OnDestroy()
 		{
+			Selection.selectionChanged -= HandleSelectionChange;
 			reconstructors = null;
 			dropdownReconstruct = null;
+		}
+
+		private void HandleSelectionChange()
+		{
+			Repaint();
 		}
 
 		public void OpenFile(Object fileObject)
@@ -672,34 +682,56 @@ namespace SubjectNerd.PsdImporter
 							strButton = string.Format("Reconstruct {0}", reconstructLayer.name);
 						}
 					}
+					
+					EditorGUILayout.PrefixLabel(labelUseConstructor);
 
-					using (new EditorGUI.DisabledGroupScope(reconstructLayer == null))
+					selectedReconstructor = EditorGUILayout.Popup(GUIContent.none,
+																selectedReconstructor,
+																dropdownReconstruct);
+
+					SpriteAlignUI.DrawGUILayout(GUIContent.none, importSettings.DocAlignment,
+						alignment =>
+						{
+							importSettings.DocAlignment = alignment;
+							if (alignment != SpriteAlignment.Custom)
+								importSettings.DocPivot = PsdImporter.AlignmentToPivot(alignment);
+							Repaint();
+						});
+
+					if (importSettings.DocAlignment == SpriteAlignment.Custom)
+						importSettings.DocPivot = EditorGUILayout.Vector2Field(GUIContent.none, importSettings.DocPivot);
+
+					bool canReconstruct = reconstructLayer != null;
+					IReconstructor reconstructorInstance = null;
+					if (canReconstruct)
 					{
-						EditorGUILayout.PrefixLabel(labelUseConstructor);
+						if (selectedReconstructor > -1 && selectedReconstructor < reconstructors.Length)
+						{
+							reconstructorInstance = reconstructors[selectedReconstructor];
+                            canReconstruct = reconstructorInstance.CanReconstruct(Selection.activeGameObject);
+						}
+						else
+						{
+							canReconstruct = false;
+						}
+					}
 
-						selectedReconstructor = EditorGUILayout.Popup(GUIContent.none, 
-																	selectedReconstructor,
-																	dropdownReconstruct);
-
-						SpriteAlignUI.DrawGUILayout(GUIContent.none, importSettings.DocAlignment,
-							alignment =>
-							{
-								importSettings.DocAlignment = alignment;
-								if (alignment != SpriteAlignment.Custom)
-									importSettings.DocPivot = PsdImporter.AlignmentToPivot(alignment);
-								Repaint();
-							});
-
-						if (importSettings.DocAlignment == SpriteAlignment.Custom)
-							importSettings.DocPivot = EditorGUILayout.Vector2Field(GUIContent.none, importSettings.DocPivot);
-
+					using (new EditorGUI.DisabledGroupScope(canReconstruct == false))
+					{
 						if (GUILayout.Button(strButton))
 						{
 							GetLayerData(lastSelectedLayer);
-							IRecontructor useReconstructor = reconstructors[selectedReconstructor];
 							PsdImporter.Reconstruct(importFile, importSettings, reconstructLayer,
-													useReconstructor, importSettings.DocPivot);
+													importSettings.DocPivot, reconstructorInstance);
 						}
+					}
+
+					if (canReconstruct == false)
+					{
+						string helpMessage = "Select a layer group";
+						if (reconstructLayer != null && reconstructorInstance != null)
+							helpMessage = reconstructorInstance.HelpMessage;
+						EditorGUILayout.HelpBox(helpMessage, MessageType.Info);
 					}
 				}
 
