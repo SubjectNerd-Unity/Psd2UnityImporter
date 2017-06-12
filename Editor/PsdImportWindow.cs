@@ -739,6 +739,27 @@ namespace SubjectNerd.PsdImporter
 				int controlID = GUIUtility.GetControlID(FocusType.Passive);
 				EditorGUIUtility.ShowObjectPicker<Texture2D>(importFile, false, string.Empty, controlID);
 			}
+
+			var evt = Event.current;
+			bool isDrag = evt.type == EventType.DragUpdated || evt.type == EventType.DragPerform;
+			if (isDrag && rLabel.Contains(evt.mousePosition))
+			{
+				DragAndDrop.visualMode = DragAndDropVisualMode.Copy;
+				if (evt.type == EventType.DragPerform)
+				{
+					DragAndDrop.AcceptDrag();
+					foreach (Object obj in DragAndDrop.objectReferences)
+					{
+						Texture2D objTexture = obj as Texture2D;
+						if (objTexture == null)
+							continue;
+						string path = AssetDatabase.GetAssetPath(obj);
+						if (path.ToLower().EndsWith(".psd") == false)
+							continue;
+						OpenFile(obj);
+					}
+				}
+			}
 		}
 
 		private void DrawReconstructor()
