@@ -133,6 +133,7 @@ namespace SubjectNerd.PsdImporter
 		private readonly GUIContent labelSelConstructor = new GUIContent("Construct As");
 		private readonly GUIContent labelDocAlign = new GUIContent("Document Alignment");
 		private readonly GUIContent labelDocPivot = new GUIContent("Document Pivot");
+		private readonly GUIContent labelLoadBoxEmpty = new GUIContent("No PSD File Loaded");
 
 		private int selectedReconstructor;
 		private GUIContent[] dropdownReconstruct;
@@ -141,7 +142,8 @@ namespace SubjectNerd.PsdImporter
 		private GUIStyle styleHeader, styleBoldFoldout,
 						styleLayerEntry, styleLayerSelected,
 						styleVisOn, styleVisOff, styleLoader,
-						styleToolbar, styleToolSearch, styleToolCancel;
+						styleToolbar, styleToolSearch, styleToolCancel,
+						styleLoadBoxEmpty;
 		private Texture2D icnFolder, icnTexture;
 		private GUILayoutOption layerHeight;
 		private GUILayoutOption noExpandW;
@@ -201,6 +203,13 @@ namespace SubjectNerd.PsdImporter
 				alignment = TextAnchor.MiddleCenter,
 				fixedHeight = 100,
 				stretchWidth = true
+			};
+
+			styleLoadBoxEmpty = new GUIStyle()
+			{
+				padding = new RectOffset(5, 5, 5, 5),
+				alignment = TextAnchor.MiddleCenter,
+				wordWrap = true
 			};
 
 			styleBoldFoldout = new GUIStyle(EditorStyles.foldout)
@@ -779,11 +788,17 @@ namespace SubjectNerd.PsdImporter
 
 		private void DrawPsdOperations()
 		{
-			GUIContent fileLabel = importFile == null ? labelFile : new GUIContent(importFile.name);
+			bool noFile = importFile == null;
+			GUIContent fileLabel = noFile ? labelFile : new GUIContent(importFile.name);
 			
 			GUILayout.Label(fileLabel, EditorStyles.boldLabel, noExpandW);
 			GUILayout.Label(importPreview, styleLoader, GUILayout.MaxHeight(100f), noExpandW, GUILayout.MinWidth(100));
 			Rect rLabel = GUILayoutUtility.GetLastRect();
+
+			if (noFile)
+			{
+				GUI.Label(rLabel, labelLoadBoxEmpty, styleLoadBoxEmpty);
+			}
 
 			Rect rPing = new Rect(rLabel) {yMax = rLabel.yMax - 15};
 			Rect rSelect = new Rect(rLabel)
