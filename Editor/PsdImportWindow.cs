@@ -448,8 +448,6 @@ namespace SubjectNerd.PsdImporter
 			using (new EditorGUILayout.HorizontalScope(styleToolbar))
 			{
 				searchFilter = EditorGUILayout.TextField(searchFilter, styleToolSearch, GUILayout.ExpandWidth(true));
-				var searchRect = GUILayoutUtility.GetLastRect();
-
 				if (GUILayout.Button(GUIContent.none, styleToolCancel))
 				{
 					searchFilter = string.Empty;
