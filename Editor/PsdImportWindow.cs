@@ -11,6 +11,8 @@ namespace SubjectNerd.PsdImporter
 {
 	public class PsdImportWindow : EditorWindow
 	{
+		private const string PrefKeyAdvancedMode = "SubjectNerdAgreement.Psd.Advanced";
+
 		#region Static
 		private const string MENU_ASSET_IMPORT = "Assets/Import PSD Layers";
 
@@ -19,6 +21,7 @@ namespace SubjectNerd.PsdImporter
 			var win = GetWindow<PsdImportWindow>();
 			win.titleContent = new GUIContent("PSD Importer");
 			win.Show(true);
+			win.minSize = new Vector2(350, 400);
 			win.autoRepaintOnSceneChange = true;
 			return win;
 		}
@@ -83,11 +86,15 @@ namespace SubjectNerd.PsdImporter
 		private bool isChangingSelection;
 		private bool selectionChangeState;
 		private string searchFilter = "";
+		private bool showHeader = true;
+		private bool isAdvancedMode = false;
 
 		private IReconstructor[] reconstructors;
 
 		#region UI fields
+
 		private readonly GUIContent labelHeader = new GUIContent("Import PSD Layers");
+		private readonly GUIContent labelAdvanced = new GUIContent("Advanced");
 		private readonly GUIContent labelFileNaming = new GUIContent("File Names");
 		private readonly GUIContent labelGrpMode = new GUIContent("Group Mode");
 		private readonly GUIContent labelPackTag = new GUIContent("Packing Tag");
@@ -204,6 +211,7 @@ namespace SubjectNerd.PsdImporter
 			Selection.selectionChanged += HandleSelectionChange;
 
 			stylesLoaded = false;
+			isAdvancedMode = EditorPrefs.GetBool(PrefKeyAdvancedMode, false);
 			typeImportUserData = typeof(ImportUserData);
 			serializer = new fsSerializer();
 
@@ -426,6 +434,12 @@ namespace SubjectNerd.PsdImporter
 			rMakeDefault.x = rScaling.xMax + padBetween;
 
 			rTableSize = new Vector2(rMakeDefault.xMax, height);
+			if (isAdvancedMode == false)
+			{
+				rTableSize.x = width;
+				if (tableWillScroll)
+					rTableSize.x -= 20;
+			}
 			return width;
 		}
 
@@ -433,18 +447,31 @@ namespace SubjectNerd.PsdImporter
 		{
 			using (new EditorGUILayout.HorizontalScope(styleToolbar))
 			{
-				searchFilter = EditorGUILayout.TextField(searchFilter, styleToolSearch);
+				searchFilter = EditorGUILayout.TextField(searchFilter, styleToolSearch, GUILayout.ExpandWidth(true));
+				var searchRect = GUILayoutUtility.GetLastRect();
+
 				if (GUILayout.Button(GUIContent.none, styleToolCancel))
 				{
 					searchFilter = string.Empty;
 					GUI.FocusControl(null);
 				}
 
-				GUILayout.FlexibleSpace();
+				if (showHeader)
+					EditorGUILayout.LabelField(labelHeader, styleHeader, noExpandW);
 
-				EditorGUILayout.LabelField(labelHeader, styleHeader);
-
-				GUILayout.FlexibleSpace();
+				using (var check = new EditorGUI.ChangeCheckScope())
+				{
+					isAdvancedMode = GUILayout.Toggle(isAdvancedMode, labelAdvanced, EditorStyles.miniButton, noExpandW);
+					if (check.changed)
+						EditorPrefs.SetBool(PrefKeyAdvancedMode, isAdvancedMode);
+				}
+				
+				if (Event.current.type == EventType.Repaint)
+				{
+					showHeader = string.IsNullOrEmpty(searchFilter);
+					if (showHeader == false)
+						showHeader = EditorGUIUtility.currentViewWidth > 400;
+				}
 			}
 
 			var width = CalculateColumns();
@@ -452,9 +479,12 @@ namespace SubjectNerd.PsdImporter
 			var rHeader = GUILayoutUtility.GetRect(width, rTableSize.x, EditorGUIUtility.singleLineHeight, EditorGUIUtility.singleLineHeight);
 			GUI.Box(rHeader, GUIContent.none, styleToolbar);
 			GUI.Label(new Rect(rLayerDisplay) { y = rHeader.y, x = rLayerDisplay.x - scrollPos.x }, "Layer");
-			GUI.Label(new Rect(rPivot) { y = rHeader.y, x = rPivot.x - scrollPos.x }, "Pivot");
-			GUI.Label(new Rect(rScaling) { y = rHeader.y, x = rScaling.x - scrollPos.x }, "Scale");
-			
+			if (isAdvancedMode)
+			{
+				GUI.Label(new Rect(rPivot) {y = rHeader.y, x = rPivot.x - scrollPos.x}, "Pivot");
+				GUI.Label(new Rect(rScaling) {y = rHeader.y, x = rScaling.x - scrollPos.x}, "Scale");
+			}
+
 			using (var scrollView = new EditorGUILayout.ScrollViewScope(scrollPos))
 			{
 				scrollPos = scrollView.scrollPosition;
@@ -550,6 +580,8 @@ namespace SubjectNerd.PsdImporter
 				{
 					var display = GetDisplayData(layer.indexId);
 					if (display == null)
+						return true;
+					if (string.IsNullOrEmpty(searchFilter) == false)
 						return true;
 					return display.isOpen;
 				},
@@ -684,28 +716,9 @@ namespace SubjectNerd.PsdImporter
 				{
 					EditorGUI.LabelField(rLayer, layerContent);
 
-					using (var check = new EditorGUI.ChangeCheckScope())
+					if (isAdvancedMode)
 					{
-						layer.Alignment = (SpriteAlignment)EditorGUI.EnumPopup(rPiv, GUIContent.none, layer.Alignment);
-						layer.ScaleFactor = (ScaleFactor)EditorGUI.EnumPopup(rScale, GUIContent.none, layer.ScaleFactor);
-
-						if (check.changed)
-						{
-							layer.useDefaults = false;
-							settingsChanged = true;
-						}
-					}
-
-					using (new EditorGUI.DisabledGroupScope(layer.useDefaults))
-					{
-						if (GUI.Button(rReset, "R", EditorStyles.miniButton))
-						{
-							settingsChanged = true;
-							layer.useDefaults = true;
-							layer.Pivot = importSettings.DefaultPivot;
-							layer.Alignment = importSettings.DefaultAlignment;
-							layer.ScaleFactor = importSettings.ScaleFactor;
-						}
+						DrawLayerAdvanced(layer, rPiv, rScale, rReset);
 					}
 				}
 			}
@@ -714,6 +727,33 @@ namespace SubjectNerd.PsdImporter
 			layerRect.xMin += 40;
 			layerRectLookup.Add(layer.indexId, layerRect);
 			layerEntryYMax = Mathf.Max(layerEntryYMax, layerRect.yMax);
+		}
+
+		private void DrawLayerAdvanced(ImportLayerData layer, Rect rPiv, Rect rScale, Rect rReset)
+		{
+			using (var check = new EditorGUI.ChangeCheckScope())
+			{
+				layer.Alignment = (SpriteAlignment)EditorGUI.EnumPopup(rPiv, GUIContent.none, layer.Alignment);
+				layer.ScaleFactor = (ScaleFactor)EditorGUI.EnumPopup(rScale, GUIContent.none, layer.ScaleFactor);
+
+				if (check.changed)
+				{
+					layer.useDefaults = false;
+					settingsChanged = true;
+				}
+			}
+
+			using (new EditorGUI.DisabledGroupScope(layer.useDefaults))
+			{
+				if (GUI.Button(rReset, "R", EditorStyles.miniButton))
+				{
+					settingsChanged = true;
+					layer.useDefaults = true;
+					layer.Pivot = importSettings.DefaultPivot;
+					layer.Alignment = importSettings.DefaultAlignment;
+					layer.ScaleFactor = importSettings.ScaleFactor;
+				}
+			}
 		}
 
 		private void DrawPsdOperations()
