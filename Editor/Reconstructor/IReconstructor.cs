@@ -29,11 +29,31 @@ namespace SubjectNerd.PsdImporter.Reconstructor
 {
 	public struct ReconstructData
 	{
+		/// <summary>
+		/// Sprite that corresponds to the layer indexId
+		/// </summary>
 		public Dictionary<int[], Sprite> spriteIndex;
-		public Dictionary<int[], Vector2> spriteAnchors; 
+		/// <summary>
+		/// Anchor information that corresponds to the layer indexId.
+		/// Ratio of the Sprite size
+		/// </summary>
+		public Dictionary<int[], Vector2> spriteAnchors;
+		/// <summary>
+		/// Size and position data of PSD layer, corresponds to the layer indexId.
+		/// Data in document pixel space
+		/// </summary>
 		public Dictionary<int[], Rect> layerBoundsIndex;
+		/// <summary>
+		/// Size of the PSD, in pixels
+		/// </summary>
 		public Vector2 documentSize;
+		/// <summary>
+		/// Pivot position for the PSD document, in ratio of size
+		/// </summary>
 		public Vector2 documentPivot;
+		/// <summary>
+		/// Unity pixels per unit value of the PSD document
+		/// </summary>
 		public float documentPPU;
 
 		public ReconstructData(Vector2 docSize, Vector2 docPivot, float PPU)
@@ -67,6 +87,13 @@ namespace SubjectNerd.PsdImporter.Reconstructor
 		/// <returns></returns>
 		bool CanReconstruct(GameObject selection);
 
+		/// <summary>
+		/// Function that rebuilds the PSD structure
+		/// </summary>
+		/// <param name="root">The root of the PSD to reconstruct</param>
+		/// <param name="data">Data gathered by the importer for rebuilding the layers with</param>
+		/// <param name="selection">Object user has selected</param>
+		/// <returns></returns>
 		GameObject Reconstruct(ImportLayerData root, ReconstructData data, GameObject selection);
 
 		/// <summary>
