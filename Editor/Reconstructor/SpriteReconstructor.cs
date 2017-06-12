@@ -59,8 +59,8 @@ namespace SubjectNerd.PsdImporter.Reconstructor
 			root.Iterate(
 				layer =>
 				{
-					// Only process non group layers
-					if (layer.Childs.Count > 0)
+					// Only process non group layers and layers marked for import
+					if (layer.Childs.Count > 0 || layer.import == false)
 						return;
 
 					// Create an object
