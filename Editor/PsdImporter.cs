@@ -242,7 +242,7 @@ namespace SubjectNerd.PsdImporter
 			return layerTexture;
 		}
 
-		private static Texture2D GetTexture(PsdLayer layer)
+		public static Texture2D GetTexture(PsdLayer layer)
 		{
 			Texture2D texture = new Texture2D(layer.Width, layer.Height);
 			Color32[] pixels = new Color32[layer.Width * layer.Height];
