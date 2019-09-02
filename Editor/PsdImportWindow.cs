@@ -217,7 +217,19 @@ namespace SubjectNerd.PsdImporter
 				fontStyle = FontStyle.Bold
 			};
 
+			// XXX: VisibilityToggle style is not exists in Unity 2018.3
+#if UNITY_2018_3_OR_NEWER
+			tempStyle = new GUIStyle()
+			{
+				normal = new GUIStyleState() { background = EditorGUIUtility.Load("Icons/animationvisibilitytoggleoff.png") as Texture2D },
+				onNormal = new GUIStyleState() { background = EditorGUIUtility.Load("Icons/animationvisibilitytoggleon.png") as Texture2D },
+				fixedHeight = 11, fixedWidth = 13,
+				border = new RectOffset(2, 2, 2, 2), overflow = new RectOffset(-1, 1, -2, 2), padding = new RectOffset(3, 3, 3, 3), richText = false,
+				stretchHeight = false, stretchWidth = false,
+			};
+#else
 			tempStyle = GUI.skin.FindStyle("VisibilityToggle");
+#endif
 
 			styleVisOff = new GUIStyle(tempStyle)
 			{
